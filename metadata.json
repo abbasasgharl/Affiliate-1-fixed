@@ -1,0 +1,8 @@
+{
+  "name": "AffiliateOS - AI Affiliate Intelligence & Cloaked Link Tracking",
+  "description": "Automated affiliate program management with AI link analysis, link cloaking, real-time click tracking, dead-link health monitors, and verified affiliate directories.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
