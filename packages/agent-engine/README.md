@@ -149,6 +149,18 @@ The worker requeues stale `running`/`validating` tasks after 15 minutes. A stale
 
 This is a queue worker implementation, not a deployment. It still needs a dedicated VM, Docker, the Cloud SQL network path, trusted project checkouts, pinned images, secret configuration and a successful live smoke test.
 
+
+## Phase 7: AffiliateOS admin dashboard
+
+The super-admin Admin Portal now includes an **AI Agent Engine** tab. It uses the typed API client and the authenticated endpoints above to:
+- Create/list projects and select the active project.
+- Queue approval-mode or policy-gated autonomous tasks with target files and context.
+- View task status, validation results, changed-file metadata, error messages and approval decisions.
+- Approve/reject pending tasks and request a draft PR for approved work.
+- View per-project execution and usage totals.
+
+The UI tab is hidden from editors because the current API is super-admin-only. The dashboard does not execute code or connect to Docker. If a task remains queued, the worker service or its project-specific configuration is not available.
+
 ## Safety
 - Generated code is never executed in the API process.
 - Autonomous PR creation is disabled by default and must not merge or deploy.
@@ -160,4 +172,4 @@ This is a queue worker implementation, not a deployment. It still needs a dedica
 Node.js 20+, existing `@google/genai`, `zod`, and `pg` dependencies, plus `GEMINI_API_KEY`. Optional `AGENT_ENGINE_MODEL`.
 
 ## Remaining phases
-Image publishing/registry configuration, live GitHub/Docker/Cloud SQL integration tests on the dedicated worker host, per-project authorization and admin dashboard. The new GitHub Actions workflow will run workspace unit tests, TypeScript checks and the production build. Docker execution and Cloud SQL migrations still require the dedicated worker/Cloud SQL environment.
+Image publishing/registry configuration, live GitHub/Docker/Cloud SQL integration tests on the dedicated worker host, per-project authorization, UI/API integration tests and operational monitoring. The new GitHub Actions workflow will run workspace unit tests, TypeScript checks and the production build. Docker execution and Cloud SQL migrations still require the dedicated worker/Cloud SQL environment.
