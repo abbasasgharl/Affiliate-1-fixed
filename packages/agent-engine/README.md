@@ -18,7 +18,7 @@ import { CloudSqlAgentRepository } from './repository.ts';
 
 const repository = new CloudSqlAgentRepository(pool);
 ```
-Pass the already configured application's `pg.Pool`; the repository does not create a pool. Apply `0001_agent_engine.sql` then `0002_agent_engine_indexes.sql` once through the existing Cloud SQL migration process.
+Pass the already configured application's `pg.Pool`; the repository does not create a pool. Apply `0001_agent_engine.sql`, `0002_agent_engine_indexes.sql`, then `0003_agent_engine_proposal_state.sql` once through the existing Cloud SQL migration process.
 
 ## Queue worker lifecycle
 1. Call `recoverStaleTasks()` on worker startup, then use `claimNextTask()` to atomically lease one queued task.
@@ -99,6 +99,28 @@ The adapter independently checks proposal paths, blocked files, duplicate paths 
 
 Unit tests cover unsafe paths, blocked lock/secret files, duplicate paths, size limits, validation gating and project mapping. The integration still needs a live GitHub App/token and a test repository to verify API permissions end-to-end.
 
+
+## Phase 5: authenticated admin API
+
+The server mounts `/api/agent-engine` using the existing AffiliateOS PostgreSQL pool and session authentication. All current endpoints are restricted to `super_admin` because the current project schema does not yet model per-project ownership or membership.
+
+- `POST /api/agent-engine/projects` — create a project configuration.
+- `POST /api/agent-engine/projects/:projectId/tasks` — enqueue a task in Cloud SQL (approval mode is the default).
+- `GET /api/agent-engine/projects/:projectId/tasks` — list tasks with bounded limit, status and timestamp cursor.
+- `GET /api/agent-engine/tasks/:taskId` — inspect task, artifact metadata and latest validation.
+- `POST /api/agent-engine/tasks/:taskId/approval` — request approval after validation.
+- `POST /api/agent-engine/approvals/:approvalId/decision` — approve or reject as a super administrator.
+- `POST /api/agent-engine/tasks/:taskId/propose` — create a draft GitHub PR after approval and passing validation.
+- `GET /api/agent-engine/projects/:projectId/usage` — read token and cost totals.
+
+Proposal requests use a new `proposing` task state and an atomic Cloud SQL claim to prevent simultaneous requests from creating duplicate pull requests. Migration `0003_agent_engine_proposal_state.sql` adds that state. Apply it only after reviewing the SQL and through the existing Cloud SQL migration process; no migration has been run automatically.
+
+Configure the GitHub integration using server-side secrets:
+- `AGENT_GITHUB_TOKEN`: GitHub App installation token or fine-grained token.
+- `AGENT_GITHUB_PROJECTS`: JSON object mapping each project ID to `{ "owner": "...", "repository": "...", "baseBranch": "main" }`.
+
+The API process does not run generated code or start Docker. Task execution remains the responsibility of a separate worker process. Do not expose Docker socket or worker credentials to the web/API container.
+
 ## Safety
 - Generated code is never executed in the API process.
 - Autonomous PR creation is disabled by default and must not merge or deploy.
@@ -110,4 +132,4 @@ Unit tests cover unsafe paths, blocked lock/secret files, duplicate paths, size 
 Node.js 20+, existing `@google/genai`, `zod`, and `pg` dependencies, plus `GEMINI_API_KEY`. Optional `AGENT_ENGINE_MODEL`.
 
 ## Remaining phases
-Authenticated Express endpoints, durable queue runner, image publishing/registry configuration, live GitHub/Docker integration tests on the dedicated worker host and admin dashboard. The new GitHub Actions workflow will run workspace unit tests, TypeScript checks and the production build. Docker execution and Cloud SQL migrations still require the dedicated worker/Cloud SQL environment.
+Durable queue runner, image publishing/registry configuration, live GitHub/Docker integration tests on the dedicated worker host, per-project authorization and admin dashboard. The new GitHub Actions workflow will run workspace unit tests, TypeScript checks and the production build. Docker execution and Cloud SQL migrations still require the dedicated worker/Cloud SQL environment.
