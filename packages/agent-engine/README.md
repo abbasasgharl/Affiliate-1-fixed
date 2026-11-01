@@ -78,4 +78,4 @@ The fixed container pipeline runs offline dependency installation with lifecycle
 Node.js 20+, existing `@google/genai`, `zod`, and `pg` dependencies, plus `GEMINI_API_KEY`. Optional `AGENT_ENGINE_MODEL`.
 
 ## Remaining phases
-Isolated Docker validator, GitHub PR adapter, authenticated Express endpoints, durable queue runner and admin dashboard. Local build, typecheck, automated tests and Cloud SQL migrations have not yet been executed in this environment.
+GitHub PR adapter, authenticated Express endpoints, durable queue runner, concrete workspace provider, sandbox image build/pinning pipeline and admin dashboard. Local build, typecheck, automated tests, Docker execution and Cloud SQL migrations have not yet been executed in this environment.
