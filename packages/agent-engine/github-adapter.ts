@@ -201,28 +201,23 @@ export class GitHubPullRequestAdapter implements IntegrationAdapter {
       '',
       `- Task: ${input.taskId}`,
       `- Validation: passed`,
-      ...input.validation.checks.slice(0, 20).map(check => `- Check: ${check.slice(0, 300)}`),
+      ...input.validation.checks.filter(check => !/^container output:/i.test(check)).slice(0, 20).map(check => `- Check: ${check.slice(0, 300)}`),
       '',
       'This pull request was created for review. It has not been merged or deployed.',
     ].join('\n');
 
-    try {
-      const pull = await this.request<GitHubPullResponse>(
-        'POST',
-        `${repositoryPath}/pulls`,
-        {
-          title: safeTitle(input.summary),
-          head: branch,
-          base: target.baseBranch,
-          body,
-          draft: true,
-        },
-      );
-      return { url: pull.html_url, reference: branch };
-    } catch (error) {
-      await this.request('DELETE', `${repositoryPath}/git/refs/heads/${encodeURIComponent(branch)}`).catch(() => undefined);
-      throw error;
-    }
+    const pull = await this.request<GitHubPullResponse>(
+      'POST',
+      `${repositoryPath}/pulls`,
+      {
+        title: safeTitle(input.summary),
+        head: branch,
+        base: target.baseBranch,
+        body,
+        draft: true,
+      },
+    );
+    return { url: pull.html_url, reference: branch };
   }
 
   private async request<T = unknown>(
