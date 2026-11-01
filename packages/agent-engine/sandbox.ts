@@ -135,7 +135,7 @@ export class DockerSandboxValidator {
   }> {
     return new Promise(resolve => {
       const args = [
-        'run', '--rm',
+        'run', '--rm', '--init',
         '--network=none',
         '--read-only',
         '--cap-drop=ALL',
@@ -160,7 +160,8 @@ export class DockerSandboxValidator {
       let timedOut = false;
       let outputLimit = false;
       let settled = false;
-      const child = spawn(this.dockerBinary, args, {
+      let forceKillTimer: ReturnType<typeof setTimeout> | undefined;
+      const stopContainer = () => {\n        child.kill('SIGTERM');\n        forceKillTimer = setTimeout(() => child.kill('SIGKILL'), 5_000);\n      };\n      const child = spawn(this.dockerBinary, args, {
         shell: false,
         windowsHide: true,
         env: { PATH: env.PATH ?? '/usr/bin:/bin', HOME: env.HOME ?? '/tmp' },
@@ -173,14 +174,12 @@ export class DockerSandboxValidator {
       }) => {
         if (settled) return;
         settled = true;
-        clearTimeout(timer);
-        resolve(value);
+        clearTimeout(timer);\n        if (forceKillTimer) clearTimeout(forceKillTimer);\n        resolve(value);
       };
 
       const timer = setTimeout(() => {
         timedOut = true;
-        child.kill('SIGKILL');
-      }, this.timeoutMs);
+        stopContainer();\n      }, this.timeoutMs);
 
       if (!child.stdout || !child.stderr) {
         child.kill('SIGKILL');
@@ -191,7 +190,7 @@ export class DockerSandboxValidator {
       child.stdout.on('data', (chunk: Buffer) => {
         const next = appendBounded(stdout, chunk, this.maxOutputBytes);
         stdout = next.value;
-        if (next.overflow) { outputLimit = true; child.kill('SIGKILL'); }
+        if (next.overflow) { outputLimit = true; stopContainer(); }
       });
       child.stderr.on('data', (chunk: Buffer) => {
         const next = appendBounded(stderr, chunk, this.maxOutputBytes);
