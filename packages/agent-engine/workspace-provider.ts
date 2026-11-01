@@ -17,7 +17,7 @@ export interface LocalWorkspaceProviderOptions {
 
 const excludedNames = new Set([
   '.git', 'node_modules', 'dist', 'build', 'coverage', '.next', '.nuxt',
-  '.turbo', '.cache', '.vercel', '.output', '.ssh', '.aws', '.docker', '.config',
+  '.turbo', '.cache', '.vercel', '.output', '.ssh', '.aws', '.docker', '.config', '.ssh', '.aws', '.docker', '.config',
 ]);
 const excludedFilePatterns = [
   /^\.env(?:\..*)?$/i,
@@ -71,7 +71,12 @@ export class LocalProjectWorkspaceProvider implements SandboxWorkspaceProvider {
     const configuredRoot = this.options.projectRoots[task.projectId];
     if (!configuredRoot) throw new Error('No trusted local checkout is configured for this project.');
 
-    const sourceRoot = await realpath(path.resolve(configuredRoot));
+    const configuredPath = path.resolve(configuredRoot);
+    const configuredInfo = await lstat(configuredPath);
+    if (!configuredInfo.isDirectory() || configuredInfo.isSymbolicLink()) {
+      throw new Error('Configured project checkout must be a real directory, not a symlink.');
+    }
+    const sourceRoot = await realpath(configuredPath);
     const sourceInfo = await lstat(sourceRoot);
     if (!sourceInfo.isDirectory() || sourceInfo.isSymbolicLink()) {
       throw new Error('Configured project checkout must be a real directory.');
