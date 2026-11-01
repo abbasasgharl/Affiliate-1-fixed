@@ -182,6 +182,12 @@ export class DockerSandboxValidator {
         child.kill('SIGKILL');
       }, this.timeoutMs);
 
+      if (!child.stdout || !child.stderr) {
+        child.kill('SIGKILL');
+        finish({ exitCode: null, stdout, stderr, timedOut, outputLimit, error: 'Docker process streams could not be initialized.' });
+        return;
+      }
+
       child.stdout.on('data', (chunk: Buffer) => {
         const next = appendBounded(stdout, chunk, this.maxOutputBytes);
         stdout = next.value;
