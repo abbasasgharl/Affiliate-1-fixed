@@ -518,7 +518,8 @@ export const api = {
     const query = new URLSearchParams();
     if (filters.limit) query.set('limit', String(filters.limit));
     if (filters.status) query.set('status', filters.status);
-    const suffix = query.size ? `?${query.toString()}` : '';
+    const queryString = query.toString();
+    const suffix = queryString ? `?${queryString}` : '';
     const res = await fetch(`/api/agent-engine/projects/${encodeURIComponent(projectId)}/tasks${suffix}`, {
       headers: getAuthHeader(),
     });
