@@ -39,6 +39,8 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
+      - name: Unit tests
+        run: npm test
       - name: TypeScript check
         run: npm run lint
       - name: Production build
