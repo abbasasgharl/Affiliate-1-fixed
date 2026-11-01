@@ -172,4 +172,4 @@ The UI tab is hidden from editors because the current API is super-admin-only. T
 Node.js 20+, existing `@google/genai`, `zod`, and `pg` dependencies, plus `GEMINI_API_KEY`. Optional `AGENT_ENGINE_MODEL`.
 
 ## Remaining phases
-Image publishing/registry configuration, live GitHub/Docker/Cloud SQL integration tests on the dedicated worker host, per-project authorization, UI/API integration tests and operational monitoring. GitHub Actions run 41362083098 passed all 9 unit tests, the TypeScript check and the production build. Docker execution, live GitHub API integration and Cloud SQL migrations still require the dedicated worker/Cloud SQL environment.
+Image publishing/registry configuration, live GitHub/Docker/Cloud SQL integration tests on the dedicated worker host, per-project authorization, UI/API integration tests and operational monitoring. GitHub Actions run 41362243401 passed all 9 unit tests, the TypeScript check and the production build. Docker execution, live GitHub API integration and Cloud SQL migrations still require the dedicated worker/Cloud SQL environment.
