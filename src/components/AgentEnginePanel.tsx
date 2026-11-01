@@ -67,11 +67,7 @@ export const AgentEnginePanel: React.FC = () => {
     [projects, projectId],
   );
 
-  const loadProjects = useCallback(async () => {
-    const rows = await api.agentEngineListProjects();
-    setProjects(rows);
-    setProjectId(current => current && rows.some(project => project.id === current) ? current : (rows[0]?.id || ''));
-  }, []);
+
 
   const loadProjectData = useCallback(async (selectedId: string) => {
     if (!selectedId) {
