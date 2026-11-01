@@ -20,7 +20,7 @@ const repository = new CloudSqlAgentRepository(pool);
 Pass the already configured application's `pg.Pool`; the repository does not create a pool. Apply `0001_agent_engine.sql` then `0002_agent_engine_indexes.sql` once through the existing Cloud SQL migration process.
 
 ## Queue worker lifecycle
-1. `claimNextTask()` atomically leases one queued task using `FOR UPDATE SKIP LOCKED`.
+1. Call `recoverStaleTasks()` on worker startup to return expired running leases to the queue, then use `claimNextTask()` to atomically lease one queued task using `FOR UPDATE SKIP LOCKED`.
 2. Run Gemini through `AgentOrchestrator`.
 3. Persist generated files with `saveWorkerResult()`.
 4. Run structural and isolated sandbox checks; persist results using `saveValidation()`.

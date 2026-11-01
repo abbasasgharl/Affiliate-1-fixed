@@ -29,7 +29,7 @@ const asTask=(r:any):PersistedTask=>({
 export class CloudSqlAgentRepository {
  constructor(private readonly pool:Pool) {}
 
- private async audit(client:{query:(text:string,values?:any[])=>Promise<any>},input:AuditInput):Promise<void>{
+ private async audit(client:any,input:AuditInput):Promise<void>{
   await client.query(
    'INSERT INTO agent_engine.audit_logs (id,project_id,task_id,actor_id,action,metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)',
    [randomUUID(),input.projectId??null,input.taskId??null,input.actorId??null,input.action,JSON.stringify(input.metadata??{})]
@@ -74,6 +74,17 @@ export class CloudSqlAgentRepository {
  }
 
  /** Atomically leases one queued task; concurrent workers cannot claim the same task. */
+ async recoverStaleTasks(staleAfterSeconds=900):Promise<number>{
+  const seconds=Math.max(60,Math.min(Math.floor(staleAfterSeconds),86400));
+  const r=await this.pool.query(
+   `UPDATE agent_engine.tasks SET status='queued',started_at=NULL,error_message='Worker lease expired; task returned to queue.'
+    WHERE status='running' AND started_at < now() - ($1 * interval '1 second') RETURNING id,project_id`,
+   [seconds]
+  );
+  for(const task of r.rows)await this.audit(this.pool,{projectId:task.project_id,taskId:task.id,action:'agent.task.lease_recovered',metadata:{staleAfterSeconds:seconds}});
+  return r.rowCount??0;
+ }
+
  async claimNextTask():Promise<PersistedTask|null>{
   const client=await this.pool.connect();
   try{
@@ -120,7 +131,7 @@ export class CloudSqlAgentRepository {
   const client=await this.pool.connect();
   try{
    await client.query('BEGIN');
-   const r=await client.query(
+   await client.query(
     `INSERT INTO agent_engine.executions
      (id,task_id,agent_id,provider,model,status,prompt_tokens,output_tokens,estimated_cost,duration_ms,metadata)
      VALUES ($1,$2,$3,'gemini',$4,$5,$6,$7,$8,$9,$10::jsonb)`,
@@ -144,6 +155,7 @@ export class CloudSqlAgentRepository {
    const task=await client.query('SELECT project_id,status FROM agent_engine.tasks WHERE id=$1 FOR UPDATE',[taskId]);
    if(!task.rowCount)throw new Error('Task not found.');
    if(!['running','validating'].includes(task.rows[0].status))throw new Error('Task is not in a writable execution state.');
+   await client.query('DELETE FROM agent_engine.artifacts WHERE task_id=$1',[taskId]);
    for(const file of result.files){
     await client.query(
      `INSERT INTO agent_engine.artifacts (id,task_id,file_path,operation,content,content_sha256)
@@ -172,8 +184,9 @@ export class CloudSqlAgentRepository {
   const client=await this.pool.connect();
   try{
    await client.query('BEGIN');
-   const task=await client.query('SELECT project_id FROM agent_engine.tasks WHERE id=$1 FOR UPDATE',[taskId]);
+   const task=await client.query('SELECT project_id,status FROM agent_engine.tasks WHERE id=$1 FOR UPDATE',[taskId]);
    if(!task.rowCount)throw new Error('Task not found.');
+   if(task.rows[0].status!=='validating')throw new Error('Task must be validating before a validation report can be saved.');
    await client.query(
     `INSERT INTO agent_engine.validation_results (id,task_id,passed,checks,findings,validator_version)
      VALUES ($1,$2,$3,$4::jsonb,$5::jsonb,$6)`,
