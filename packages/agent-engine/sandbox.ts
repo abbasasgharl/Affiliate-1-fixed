@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import { Buffer } from 'node:buffer';
+import process from 'node:process';
 import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentTask, GeneratedFile, ValidationReport } from './index.ts';
@@ -175,7 +177,7 @@ export class DockerSandboxValidator {
         resolve(value);
       };
 
-      const timer = setTimeout(() => {
+      if (!child.stdout || !child.stderr) {\n        child.kill('SIGKILL');\n        finish({ exitCode: null, stdout, stderr, timedOut, outputLimit, error: 'Docker process streams could not be initialized.' });\n        return;\n      }\n\n      const timer = setTimeout(() => {
         timedOut = true;
         child.kill('SIGKILL');
       }, this.timeoutMs);
