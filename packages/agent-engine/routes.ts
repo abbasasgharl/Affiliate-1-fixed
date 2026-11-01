@@ -237,8 +237,8 @@ export function createAgentEngineRouter(options: AgentEngineRouterOptions) {
     } catch (error) {
       await repository.setTaskStatus(
         task.id,
-        'ready_to_propose',
-        error instanceof Error ? error.message.slice(0, 1000) : 'GitHub proposal failed.',
+        'failed',
+        error instanceof Error ? error.message.slice(0, 1000) : 'GitHub proposal failed; verify GitHub before retrying.',
       ).catch(() => undefined);
       throw error;
     }
