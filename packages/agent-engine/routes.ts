@@ -74,7 +74,12 @@ export function createAgentEngineRouter(options: AgentEngineRouterOptions) {
   // to super administrators until per-project membership/ownership is implemented.
   router.use(requireAuth, requireRole('super_admin'));
 
-  router.get('/projects', asyncRoute(async (_req, res) => {\n    const projects = await repository.listProjects();\n    return res.json({ success: true, projects });\n  }));\n\n  router.post('/projects', asyncRoute(async (req, res) => {
+  router.get('/projects', asyncRoute(async (_req, res) => {
+    const projects = await repository.listProjects();
+    return res.json({ success: true, projects });
+  }));
+
+  router.post('/projects', asyncRoute(async (req, res) => {
     const parsed = projectSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
@@ -147,7 +152,11 @@ export function createAgentEngineRouter(options: AgentEngineRouterOptions) {
     }
     const task = await repository.getTask(taskId.data);
     if (!task) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Task not found.' } });
-    const [artifacts, validation, approval] = await Promise.all([\n      repository.getArtifactMetadata(task.id),\n      repository.getLatestValidation(task.id),\n      repository.getLatestApproval(task.id),\n    ]);
+    const [artifacts, validation, approval] = await Promise.all([
+      repository.getArtifactMetadata(task.id),
+      repository.getLatestValidation(task.id),
+      repository.getLatestApproval(task.id),
+    ]);
     return res.json({
       success: true,
       task,
