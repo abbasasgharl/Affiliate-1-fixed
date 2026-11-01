@@ -29,6 +29,43 @@ Pass the already configured application's `pg.Pool`; the repository does not cre
 
 The task status helper enforces legal forward transitions. The application must enforce authentication, project ownership and reviewer permissions before repository calls. This package does not implement an HTTP API, worker scheduler, sandbox or Git adapter yet.
 
+
+## Phase 3: isolated Docker validation
+
+`DockerSandboxValidator` implements the engine's `validator.validate(files, task)` contract. It does not run code in the AffiliateOS API process. The validator delegates checkout creation and patch application to a `SandboxWorkspaceProvider`; that provider must create a disposable full-project workspace, safely overlay only the proposed files, reject traversal and symlinks, and exclude `.git`, `.env*`, credentials, production data and `node_modules`.
+
+Example wiring (the workspace provider is an infrastructure adapter and must be implemented for the worker host):
+
+```ts
+import { AgentOrchestrator } from './index.ts';
+import { DockerSandboxValidator } from './sandbox.ts';
+import { ProjectWorkspaceProvider } from './workspace-provider.ts';
+
+const validator = new DockerSandboxValidator(
+  new ProjectWorkspaceProvider(),
+  {
+    image: process.env.AGENT_SANDBOX_IMAGE!, // must include @sha256:<64-hex digest>
+    timeoutMs: 180_000,
+    memoryMb: 1024,
+    cpus: 1,
+    pidsLimit: 128,
+  },
+);
+
+const orchestrator = new AgentOrchestrator({ validator });
+```
+
+The fixed container pipeline runs offline dependency installation with lifecycle scripts disabled, then the project's lint, build and test scripts when present. It uses `--network=none`, a read-only container root, dropped Linux capabilities, `no-new-privileges`, a non-root UID, bounded CPU/RAM/PIDs/time/output, and only one disposable workspace bind mount. It accepts no task-provided shell commands, image names, environment variables or extra mounts. The sandbox image must be prebuilt with Node/npm and a populated npm cache for the project's dependency set; network access is intentionally unavailable during validation.
+
+### Deployment boundary
+
+- Run the queue worker and Docker daemon on a dedicated worker host or VM, separate from the AffiliateOS web/API process.
+- Never mount `/var/run/docker.sock` into the API container. Docker daemon access is effectively host-level privilege.
+- Pin the sandbox image by digest and rebuild it through a trusted image pipeline.
+- The workspace provider is security-critical: it must copy from a trusted project checkout, enforce path and size limits, reject symlinks, and never include credentials or production data.
+- This phase supplies the validator and security boundary. It does not yet provide a workspace provider, queue runner, Docker host, image build pipeline, or live deployment configuration.
+- A Docker daemon, a pinned sandbox image, and a real project workspace are required before end-to-end validation can be marked as passed.
+
 ## Safety
 - Generated code is never executed in the API process.
 - Autonomous PR creation is disabled by default and must not merge or deploy.
