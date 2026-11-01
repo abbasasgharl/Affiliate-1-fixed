@@ -1,3 +1,5 @@
+import { env } from 'node:process';
+import { Buffer } from 'node:buffer';
 import { GoogleGenAI, Type } from '@google/genai';
 import { z } from 'zod';
 
@@ -42,7 +44,7 @@ const norm=(p:string)=>p.replace(/\\/g,'/').replace(/^\.\//,'');
 export class AgentOrchestrator {
  private readonly ai:GoogleGenAI;
  constructor(private readonly options:EngineOptions){
-  const key=process.env.GEMINI_API_KEY;
+  const key=env.GEMINI_API_KEY;
   if(!key)throw new Error('GEMINI_API_KEY is required.');
   this.ai=new GoogleGenAI({apiKey:key});
  }
@@ -50,7 +52,7 @@ export class AgentOrchestrator {
   const validatedTask=z.object({projectId:z.string().min(1),taskId:z.string().min(1),title:z.string().min(1),description:z.string().min(1),category:z.enum(['backend','frontend','database','security','testing','code_review','general']),targetFiles:z.array(z.string().min(1)).max(100),context:z.string().optional(),mode:z.enum(['approval','autonomous'])}).strict().parse(task);
   const agent=agents[validatedTask.category==='general'?'backend':validatedTask.category];
   try{
-   const response=await this.ai.models.generateContent({model:this.options.model||process.env.AGENT_ENGINE_MODEL||'gemini-3.8-flash',contents:JSON.stringify({task:validatedTask,outputRules:['Only use targetFiles paths.','Delete content must be empty.','Return JSON only.']}),config:{systemInstruction:agent.instructions,responseMimeType:'application/json',responseSchema,maxOutputTokens:16384}});
+   const response=await this.ai.models.generateContent({model:this.options.model||env.AGENT_ENGINE_MODEL||'gemini-3.8-flash',contents:JSON.stringify({task:validatedTask,outputRules:['Only use targetFiles paths.','Delete content must be empty.','Return JSON only.']}),config:{systemInstruction:agent.instructions,responseMimeType:'application/json',responseSchema,maxOutputTokens:16384}});
    if(!response.text)throw new Error('Gemini returned an empty response.');
    const result=outputSchema.parse(JSON.parse(response.text));
    const allow=new Set(validatedTask.targetFiles.map(norm));const seen=new Set<string>();const findings:string[]=[];

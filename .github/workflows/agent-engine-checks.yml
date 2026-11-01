@@ -1,0 +1,47 @@
+name: Agent Engine Checks
+
+on:
+  pull_request:
+    paths:
+      - 'packages/agent-engine/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - '.github/workflows/agent-engine-checks.yml'
+  push:
+    branches:
+      - feature/agent-engine-docker-sandbox
+    paths:
+      - 'packages/agent-engine/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - '.github/workflows/agent-engine-checks.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-engine-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Unit tests
+        run: npm test
+      - name: TypeScript check
+        run: npm run lint
+      - name: Production build
+        run: npm run build
