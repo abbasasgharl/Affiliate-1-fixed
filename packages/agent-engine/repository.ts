@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { AgentTask, GeneratedFile, ValidationReport, WorkerResult } from './index.ts';
 
-export type PersistedTaskStatus = 'queued'|'running'|'validating'|'awaiting_approval'|'ready_to_propose'|'proposed'|'failed'|'cancelled';
+export type PersistedTaskStatus = 'queued'|'running'|'validating'|'awaiting_approval'|'ready_to_propose'|'proposing'|'proposed'|'failed'|'cancelled';
 export interface PersistedTask {
   id:string; projectId:string; title:string; description:string; category:string;
   executionMode:'approval'|'autonomous'; status:PersistedTaskStatus;
@@ -105,11 +105,29 @@ export class CloudSqlAgentRepository {
   finally{client.release();}
  }
 
+
+ /** Atomically claims a validated, approved task for one PR proposal attempt. */
+ async claimTaskForProposal(taskId:string,actorId?:string):Promise<boolean>{
+  const client=await this.pool.connect();
+  try{
+   await client.query('BEGIN');
+   const claimed=await client.query(
+    `UPDATE agent_engine.tasks SET status='proposing',error_message=NULL
+     WHERE id=$1 AND status='ready_to_propose' RETURNING project_id`,[taskId]
+   );
+   if(!claimed.rowCount){await client.query('ROLLBACK');return false;}
+   await this.audit(client,{projectId:claimed.rows[0].project_id,taskId,actorId,action:'agent.task.proposal_claimed'});
+   await client.query('COMMIT');
+   return true;
+  }catch(error){await client.query('ROLLBACK');throw error;}
+  finally{client.release();}
+ }
+
  async setTaskStatus(taskId:string,status:PersistedTaskStatus,errorMessage?:string|null):Promise<void>{
   const allowed:Record<PersistedTaskStatus,PersistedTaskStatus[]> = {
    queued:['running','cancelled'],running:['validating','failed','cancelled'],
    validating:['awaiting_approval','ready_to_propose','failed','cancelled'],
-   awaiting_approval:['ready_to_propose','cancelled'],ready_to_propose:['proposed','failed','cancelled'],
+   awaiting_approval:['ready_to_propose','cancelled'],ready_to_propose:['proposing','failed','cancelled'],proposing:['proposed','ready_to_propose','failed'],
    proposed:[],failed:[],cancelled:[]
   };
   const current=await this.getTask(taskId);
