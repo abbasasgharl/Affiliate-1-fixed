@@ -139,7 +139,7 @@ export class DockerSandboxValidator {
     outputLimit: boolean;
     error?: string;
   }> {
-    const image = typeof this.options.image === 'string' ? this.options.image : this.options.image[projectId];
+    const image = typeof this.options.image === 'string'\n      ? this.options.image\n      : Object.hasOwn(this.options.image, projectId) ? this.options.image[projectId] : undefined;
     if (!image) throw new Error('No sandbox image is configured for project: ' + projectId);
     return new Promise(resolve => {
       const args = [
