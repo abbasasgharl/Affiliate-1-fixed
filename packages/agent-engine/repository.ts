@@ -78,7 +78,7 @@ export class CloudSqlAgentRepository {
   const seconds=Math.max(60,Math.min(Math.floor(staleAfterSeconds),86400));
   const r=await this.pool.query(
    `UPDATE agent_engine.tasks SET status='queued',started_at=NULL,error_message='Worker lease expired; task returned to queue.'
-    WHERE status='running' AND started_at < now() - ($1 * interval '1 second') RETURNING id,project_id`,
+    WHERE status IN ('running','validating') AND started_at < now() - ($1 * interval '1 second') RETURNING id,project_id`,
    [seconds]
   );
   for(const task of r.rows)await this.audit(this.pool,{projectId:task.project_id,taskId:task.id,action:'agent.task.lease_recovered',metadata:{staleAfterSeconds:seconds}});
@@ -107,6 +107,29 @@ export class CloudSqlAgentRepository {
 
 
  /** Atomically claims a validated, approved task for one PR proposal attempt. */
+
+ /** Atomically claims the oldest approved task waiting for a pull-request proposal. */
+ async claimNextProposalTask(actorId?:string):Promise<PersistedTask|null>{
+  const client=await this.pool.connect();
+  try{
+   await client.query('BEGIN');
+   const selected=await client.query(
+    `SELECT * FROM agent_engine.tasks WHERE status='ready_to_propose'
+     ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED`
+   );
+   if(!selected.rowCount){await client.query('COMMIT');return null;}
+   const id=selected.rows[0].id;
+   const updated=await client.query(
+    `UPDATE agent_engine.tasks SET status='proposing',started_at=now(),error_message=NULL
+     WHERE id=$1 RETURNING *`,[id]
+   );
+   await this.audit(client,{projectId:updated.rows[0].project_id,taskId:id,actorId,action:'agent.task.proposal_claimed'});
+   await client.query('COMMIT');
+   return asTask(updated.rows[0]);
+  }catch(error){await client.query('ROLLBACK');throw error;}
+  finally{client.release();}
+ }
+
  async claimTaskForProposal(taskId:string,actorId?:string):Promise<boolean>{
   const client=await this.pool.connect();
   try{
