@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, lstat, readdir, copyFile, writeFile, unlink, rm, realpath } from 'node:fs/promises';
-import os from 'node:os';
+import * as os from 'node:os';
 import { Buffer } from 'node:buffer';
-import path from 'node:path';
+import * as path from 'node:path';
 import type { AgentTask, GeneratedFile } from './index.ts';
 import type { SandboxWorkspace, SandboxWorkspaceProvider } from './sandbox.ts';
 
