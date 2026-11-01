@@ -41,7 +41,7 @@ interface GitHubPullResponse {
 
 const API = 'https://api.github.com';
 const allowedPrefixes = ['src/', 'tests/', 'packages/', 'migrations/', 'docs/'];
-const blockedPath = [
+const blockedContent = [\n  /-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----/,\n  /\\bAIza[0-9A-Za-z_-]{30,}\\b/,\n  /\\bgh[pousr]_[A-Za-z0-9]{20,}\\b/,\n  /\\bsk-[A-Za-z0-9_-]{20,}\\b/,\n  /(api[_-]?key|client[_-]?secret|access[_-]?token)\\s*[:=]\\s*['\"][^'\"]{12,}['\"]/i,\n];\n\nconst blockedPath = [
   /(^|\\/)\\.env(?:\\.|$)/i,
   /(^|\\/)\\.git(?:\\/|$)/i,
   /(^|\\/)node_modules(?:\\/|$)/i,
@@ -86,7 +86,7 @@ export function validateProposalFiles(files: GeneratedFile[]): void {
     if (file.operation !== 'delete' && !file.content) {
       throw new Error(`Empty generated file is not allowed: ${normalized}`);
     }
-    const size = Buffer.byteLength(file.content, 'utf8');
+    if (blockedContent.some(pattern => pattern.test(file.content))) {\n      throw new Error(`Potential secret detected in generated file: ${normalized}`);\n    }\n    const size = Buffer.byteLength(file.content, 'utf8');
     if (size > 250_000) throw new Error(`Generated file exceeds size limit: ${normalized}`);
     totalBytes += size;
     if (totalBytes > 2_000_000) throw new Error('Pull request patch exceeds total size limit.');
