@@ -38,7 +38,7 @@ const allowedTargetPath = (value: string): boolean => {
     !/^[A-Za-z]:/.test(normalized) &&
     !parts.some(part => !part || part === '.' || part === '..' || /[\u0000-\u001f\u007f]/.test(part)) &&
     ['src/', 'tests/', 'packages/', 'migrations/', 'docs/'].some(prefix => normalized.startsWith(prefix)) &&
-    !/(^|\/)\.env(?:\.|$)|(^|\/)\.git(?:\/|$)|(^|\/)node_modules(?:\/|$)|(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/i.test(normalized)
+    !forbiddenTargetPath.some(pattern => pattern.test(normalized))
   );
 };
 
