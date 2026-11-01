@@ -40,7 +40,8 @@ import {
   GripVertical,
   ArrowUp,
   ArrowDown,
-  Flame
+  Flame,
+  Bot
 } from 'lucide-react';
 import {
   AffiliateProgram,
@@ -55,6 +56,7 @@ import {
   ContactMessage
 } from '../types';
 import { api } from '../services/api';
+import { AgentEnginePanel } from './AgentEnginePanel';
 
 interface AdminPortalProps {
   programs: AffiliateProgram[];
@@ -83,7 +85,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     | 'notifications'
     | 'team_management'
     | 'reviews'
-    | 'inbox';
+    | 'inbox'
+    | 'agent_engine';
 
   const [activeTab, setActiveTab] = useState<AdminTab>('programs');
 
@@ -911,6 +914,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <Users className="w-4 h-4" />
               <span>Admin Users & Privileges</span>
             </button>
+
+            {currentUserRole === 'super_admin' && (
+              <button
+                onClick={() => selectTab('agent_engine')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer ${
+                  activeTab === 'agent_engine'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <Bot className="w-4 h-4" />
+                <span>AI Agent Engine</span>
+              </button>
+            )}
 
             <button
               onClick={() => selectTab('reviews')}
@@ -2268,6 +2285,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         </div>
       )}
+
+      {currentUserRole === 'super_admin' && activeTab === 'agent_engine' && <AgentEnginePanel />}
 
       {/* Modal: Add User with Admin Privilege */}
       {isAddUserModalOpen && (
