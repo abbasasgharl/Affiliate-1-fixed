@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, lstat, readdir, copyFile, readFile, writeFile, unlink, rm, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, lstat, readdir, copyFile, writeFile, unlink, rm, realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { AgentTask, GeneratedFile } from './index.ts';
@@ -17,7 +17,7 @@ export interface LocalWorkspaceProviderOptions {
 
 const excludedNames = new Set([
   '.git', 'node_modules', 'dist', 'build', 'coverage', '.next', '.nuxt',
-  '.turbo', '.cache', '.vercel', '.output',
+  '.turbo', '.cache', '.vercel', '.output', '.ssh', '.aws', '.docker', '.config',
 ]);
 const excludedFilePatterns = [
   /^\.env(?:\..*)?$/i,
