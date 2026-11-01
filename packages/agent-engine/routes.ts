@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
+import type { IntegrationAdapter } from './index.ts';
 import { requireAuth, requireRole } from '../../src/security/auth.ts';
 import {
   CloudSqlAgentRepository,
@@ -47,7 +48,7 @@ const decisionSchema = z.object({
 
 const statusValues: PersistedTaskStatus[] = [
   'queued', 'running', 'validating', 'awaiting_approval',
-  'ready_to_propose', 'proposed', 'failed', 'cancelled',
+  'ready_to_propose', 'proposing', 'proposed', 'failed', 'cancelled',
 ];
 
 const asyncRoute = (
@@ -58,6 +59,7 @@ const asyncRoute = (
 
 export interface AgentEngineRouterOptions {
   repository: CloudSqlAgentRepository;
+  integration?: IntegrationAdapter;
 }
 
 /**
@@ -66,7 +68,7 @@ export interface AgentEngineRouterOptions {
  */
 export function createAgentEngineRouter(options: AgentEngineRouterOptions) {
   const router = Router();
-  const { repository } = options;
+  const { repository, integration } = options;
 
   // Project ownership is not represented in the current schema, so restrict this control plane
   // to super administrators until per-project membership/ownership is implemented.
@@ -189,6 +191,58 @@ export function createAgentEngineRouter(options: AgentEngineRouterOptions) {
       parsed.data.comment,
     );
     return res.json({ success: true, approval: { id: approvalId.data, decision: parsed.data.decision } });
+  }));
+
+  router.post('/tasks/:taskId/propose', asyncRoute(async (req, res) => {
+    const taskId = taskIdSchema.safeParse(req.params.taskId);
+    if (!taskId.success) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_TASK_ID', message: 'Invalid task ID.' } });
+    }
+    if (!integration) {
+      return res.status(503).json({ success: false, error: { code: 'GITHUB_NOT_CONFIGURED', message: 'GitHub pull-request integration is not configured.' } });
+    }
+
+    const task = await repository.getTask(taskId.data);
+    if (!task) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Task not found.' } });
+    if (task.status !== 'ready_to_propose') {
+      return res.status(409).json({ success: false, error: { code: 'TASK_NOT_APPROVED', message: 'Task must be approved and ready to propose.' } });
+    }
+    const validation = await repository.getLatestValidation(task.id);
+    if (!validation?.passed) {
+      return res.status(409).json({ success: false, error: { code: 'VALIDATION_REQUIRED', message: 'A passing validation report is required.' } });
+    }
+    const files = await repository.getArtifacts(task.id);
+    if (files.length === 0) {
+      return res.status(409).json({ success: false, error: { code: 'NO_ARTIFACTS', message: 'No generated files are available for this task.' } });
+    }
+
+    const claimed = await repository.claimTaskForProposal(task.id, req.user!.userId);
+    if (!claimed) {
+      return res.status(409).json({ success: false, error: { code: 'PROPOSAL_ALREADY_CLAIMED', message: 'Another request is already processing this proposal.' } });
+    }
+
+    try {
+      const savedResult = task.result && typeof task.result === 'object'
+        ? task.result as Record<string, unknown>
+        : {};
+      const summary = typeof savedResult.summary === 'string' ? savedResult.summary : 'Validated agent changes';
+      const pullRequest = await integration.propose({
+        projectId: task.projectId,
+        taskId: task.id,
+        files,
+        summary,
+        validation,
+      });
+      await repository.setTaskStatus(task.id, 'proposed');
+      return res.status(201).json({ success: true, pullRequest });
+    } catch (error) {
+      await repository.setTaskStatus(
+        task.id,
+        'ready_to_propose',
+        error instanceof Error ? error.message.slice(0, 1000) : 'GitHub proposal failed.',
+      ).catch(() => undefined);
+      throw error;
+    }
   }));
 
   router.get('/projects/:projectId/usage', asyncRoute(async (req, res) => {
