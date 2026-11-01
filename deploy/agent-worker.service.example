@@ -1,0 +1,32 @@
+[Unit]
+Description=AffiliateOS AI Agent Worker
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=agent-worker
+Group=docker
+WorkingDirectory=/opt/affiliateos
+EnvironmentFile=/etc/affiliateos/agent-worker.env
+Environment=NODE_ENV=production
+UMask=0077
+ExecStart=/usr/bin/npm run agent-worker
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+KillSignal=SIGTERM
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/tmp/agent-workspaces
+
+[Install]
+WantedBy=multi-user.target
