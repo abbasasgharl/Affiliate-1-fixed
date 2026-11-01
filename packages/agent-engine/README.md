@@ -121,6 +121,34 @@ Configure the GitHub integration using server-side secrets:
 
 The API process does not run generated code or start Docker. Task execution remains the responsibility of a separate worker process. Do not expose Docker socket or worker credentials to the web/API container.
 
+
+## Phase 6: separate durable queue worker
+
+The worker runs separately from the Express API, polls the existing Google Cloud SQL queue, leases tasks with `FOR UPDATE SKIP LOCKED`, runs Gemini, validates generated changes in Docker, persists artifacts/validation, and routes the task to approval or proposal. The API process never starts Docker or executes generated code.
+
+Start it on the dedicated Linux worker host with:
+
+```bash
+npm ci
+npm run agent-worker
+```
+
+Required worker environment (use a secret manager or a root-readable environment file; never commit secrets):
+
+- `GEMINI_API_KEY`
+- Existing Cloud SQL settings: `DATABASE_URL` or `SQL_HOST`, `SQL_USER`, `SQL_PASSWORD`, `SQL_DB_NAME`
+- `AGENT_PROJECT_ROOTS`: JSON map of project IDs to trusted local checkout paths, e.g. `{"affiliateos":"/opt/affiliateos"}`.
+- `AGENT_SANDBOX_IMAGES`: JSON map of project IDs to private-registry image references pinned by SHA-256 digest.
+- `AGENT_GITHUB_TOKEN` and `AGENT_GITHUB_PROJECTS` for proposal creation.
+- Optional: `AGENT_ALLOW_AUTONOMOUS_PR=true` to permit autonomous draft PRs. Default is false; autonomous tasks then enter the human approval path.
+- Optional resource/poll settings: `AGENT_WORKER_POLL_MS`, `AGENT_SANDBOX_TIMEOUT_MS`, `AGENT_SANDBOX_MEMORY_MB`, `AGENT_SANDBOX_CPUS`, `AGENT_SANDBOX_PIDS_LIMIT`, `AGENT_WORKSPACE_TEMP_ROOT`.
+
+In production the worker enforces UID 10001. The worker user needs access to the Docker daemon on this dedicated VM (typically via the Docker group, which is effectively host-level privilege), but the API container must never receive Docker socket access. The included `deploy/agent-worker.service.example` is a hardened systemd starting point. Keep the project checkout read-only to the worker and make only the private workspace directory writable.
+
+The worker requeues stale `running`/`validating` tasks after 15 minutes. A stale `proposing` task is marked failed with an explicit instruction to check GitHub before retrying; it is not automatically replayed because a PR may have been created immediately before a worker crash. Execution token counts/costs remain unknown unless a future Gemini usage-metadata integration supplies them.
+
+This is a queue worker implementation, not a deployment. It still needs a dedicated VM, Docker, the Cloud SQL network path, trusted project checkouts, pinned images, secret configuration and a successful live smoke test.
+
 ## Safety
 - Generated code is never executed in the API process.
 - Autonomous PR creation is disabled by default and must not merge or deploy.
@@ -132,4 +160,4 @@ The API process does not run generated code or start Docker. Task execution rema
 Node.js 20+, existing `@google/genai`, `zod`, and `pg` dependencies, plus `GEMINI_API_KEY`. Optional `AGENT_ENGINE_MODEL`.
 
 ## Remaining phases
-Durable queue runner, image publishing/registry configuration, live GitHub/Docker integration tests on the dedicated worker host, per-project authorization and admin dashboard. The new GitHub Actions workflow will run workspace unit tests, TypeScript checks and the production build. Docker execution and Cloud SQL migrations still require the dedicated worker/Cloud SQL environment.
+Image publishing/registry configuration, live GitHub/Docker/Cloud SQL integration tests on the dedicated worker host, per-project authorization and admin dashboard. The new GitHub Actions workflow will run workspace unit tests, TypeScript checks and the production build. Docker execution and Cloud SQL migrations still require the dedicated worker/Cloud SQL environment.
