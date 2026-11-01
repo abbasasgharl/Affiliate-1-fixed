@@ -70,7 +70,8 @@ export class DockerSandboxValidator {
   ) {
     if (typeof options.image === 'string') validateImage(options.image);
     else {
-      const images = Object.values(options.image);\n      if (images.length === 0) throw new Error('At least one project sandbox image must be configured.');\n      images.forEach(validateImage);\n    }
+      const images = Object.values(options.image);
+      if (images.length === 0) throw new Error('At least one project sandbox image must be configured.');\n      images.forEach(validateImage);\n    }
     this.timeoutMs = bounded(options.timeoutMs, 180_000, 10_000, 600_000);
     this.memoryMb = bounded(options.memoryMb, 1024, 256, 4096);
     this.cpus = Math.max(0.25, Math.min(options.cpus ?? 1, 4));
