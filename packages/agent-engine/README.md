@@ -71,6 +71,34 @@ The fixed container pipeline runs offline dependency installation with lifecycle
 - Configure `projectRoots` only with trusted local checkouts. The workspace provider is security-critical and must never copy credentials or production data.
 - The sandbox requires a Docker daemon, a pinned image and a full project checkout before end-to-end validation can pass.
 
+
+## Phase 4: GitHub pull-request adapter
+
+`GitHubPullRequestAdapter` creates a dedicated branch, Git commit and **draft** pull request using the GitHub REST API. It never merges or deploys. Repository selection comes only from a server-owned `projects` map; a task cannot supply an owner, repository, branch or API URL.
+
+Example configuration:
+
+```ts
+import { GitHubPullRequestAdapter } from './github-adapter.ts';
+
+const integration = new GitHubPullRequestAdapter({
+  token: process.env.AGENT_GITHUB_TOKEN!,
+  projects: {
+    affiliateos: {
+      owner: 'YOUR_GITHUB_OWNER',
+      repository: 'YOUR_REPOSITORY',
+      baseBranch: 'main',
+    },
+  },
+});
+```
+
+Use a GitHub App installation token or a fine-grained token restricted to the mapped repository with Contents read/write and Pull Requests read/write permissions. Store it only in the worker's secret manager as `AGENT_GITHUB_TOKEN`; never put it in Cloud SQL task context or pass it into the sandbox container.
+
+The adapter independently checks proposal paths, blocked files, duplicate paths and patch sizes. It requires a passing validation report, creates a unique `agent/*` branch, commits the patch and opens a draft PR. Validation output is deliberately omitted from the PR body to avoid disclosing build logs. For approval mode, call the adapter only after the repository records an authorized approval; autonomous mode remains disabled unless explicitly enabled by server policy.
+
+Unit tests cover unsafe paths, blocked lock/secret files, duplicate paths, size limits, validation gating and project mapping. The integration still needs a live GitHub App/token and a test repository to verify API permissions end-to-end.
+
 ## Safety
 - Generated code is never executed in the API process.
 - Autonomous PR creation is disabled by default and must not merge or deploy.
@@ -82,4 +110,4 @@ The fixed container pipeline runs offline dependency installation with lifecycle
 Node.js 20+, existing `@google/genai`, `zod`, and `pg` dependencies, plus `GEMINI_API_KEY`. Optional `AGENT_ENGINE_MODEL`.
 
 ## Remaining phases
-GitHub PR adapter, authenticated Express endpoints, durable queue runner, image publishing/registry configuration, integration tests on the dedicated worker host and admin dashboard. The new GitHub Actions workflow will run workspace unit tests, TypeScript checks and the production build. Docker execution and Cloud SQL migrations still require the dedicated worker/Cloud SQL environment.
+Authenticated Express endpoints, durable queue runner, image publishing/registry configuration, live GitHub/Docker integration tests on the dedicated worker host and admin dashboard. The new GitHub Actions workflow will run workspace unit tests, TypeScript checks and the production build. Docker execution and Cloud SQL migrations still require the dedicated worker/Cloud SQL environment.
