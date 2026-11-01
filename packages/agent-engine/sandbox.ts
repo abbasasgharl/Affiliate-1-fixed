@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { Buffer } from 'node:buffer';
-import process from 'node:process';
+import { env } from 'node:process';
 import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentTask, GeneratedFile, ValidationReport } from './index.ts';
@@ -163,7 +163,7 @@ export class DockerSandboxValidator {
       const child = spawn(this.dockerBinary, args, {
         shell: false,
         windowsHide: true,
-        env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: process.env.HOME ?? '/tmp' },
+        env: { PATH: env.PATH ?? '/usr/bin:/bin', HOME: env.HOME ?? '/tmp' },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
