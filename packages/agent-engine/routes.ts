@@ -165,6 +165,7 @@ export function createAgentEngineRouter(options: AgentEngineRouterOptions) {
         operation: file.operation,
       })),
       validation,
+      approval,
     });
   }));
 
