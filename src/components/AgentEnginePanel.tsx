@@ -95,15 +95,20 @@ export const AgentEnginePanel: React.FC = () => {
     setRefreshing(true);
     setError('');
     try {
-      await loadProjects();
-      if (projectId) await loadProjectData(projectId);
+      const rows = await api.agentEngineListProjects();
+      setProjects(rows);
+      const activeId = projectId && rows.some(project => project.id === projectId)
+        ? projectId
+        : (rows[0]?.id || '');
+      setProjectId(activeId);
+      if (activeId) await loadProjectData(activeId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to refresh Agent Engine data.');
     } finally {
       setRefreshing(false);
       setLoading(false);
     }
-  }, [loadProjects, loadProjectData, projectId]);
+  }, [loadProjectData, projectId]);
 
   useEffect(() => {
     let active = true;
@@ -216,6 +221,21 @@ export const AgentEnginePanel: React.FC = () => {
       setNotice('Task queued. The dedicated worker will pick it up when its environment is online.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to queue task.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const requestApproval = async () => {
+    if (!selectedTask) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api.agentEngineRequestApproval(selectedTask.task.id);
+      await refreshSelectedTask();
+      setNotice('Approval requested.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to request approval.');
     } finally {
       setBusy(false);
     }
@@ -465,7 +485,7 @@ export const AgentEnginePanel: React.FC = () => {
               )}
 
               {selectedTask.task.status === 'awaiting_approval' && !selectedTask.approval && (
-                <button onClick={async () => { await api.agentEngineRequestApproval(selectedTask.task.id); await refreshSelectedTask(); }} disabled={busy} className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-bold text-amber-800 disabled:opacity-50">Request approval</button>
+                <button onClick={requestApproval} disabled={busy} className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-bold text-amber-800 disabled:opacity-50">Request approval</button>
               )}
 
               {selectedTask.task.status === 'ready_to_propose' && (
