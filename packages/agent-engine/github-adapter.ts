@@ -105,6 +105,7 @@ export function validateProposalFiles(files: GeneratedFile[]): void {
 }
 
 function validateTarget(target: GitHubProjectTarget): void {
+  if (!target || typeof target !== 'object') throw new Error('Configured GitHub project target is invalid.');
   if (
     !/^[A-Za-z0-9_.-]{1,100}$/.test(target.owner) ||
     !/^[A-Za-z0-9_.-]{1,100}$/.test(target.repository) ||
