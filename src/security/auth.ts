@@ -104,6 +104,9 @@ export async function revokeSession(token: string): Promise<void> {
     await db.update(sessions).set({ revoked: true }).where(eq(sessions.id, tokenHash));
   } catch (err) {
     console.error('[Auth] Failed to revoke session in PostgreSQL:', err);
+    // Do not report logout as successful when the server-side session remains active.
+    // Callers can now return an error and retain the cookie so the user can retry.
+    throw new Error('Could not revoke session. Please try again.', { cause: err });
   }
 }
 
