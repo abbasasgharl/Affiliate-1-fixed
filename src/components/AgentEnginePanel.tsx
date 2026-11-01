@@ -58,7 +58,7 @@ export const AgentEnginePanel: React.FC = () => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('backend');
-  const [targetFiles, setTargetFiles] = useState('src/');
+  const [targetFiles, setTargetFiles] = useState('src/example.ts');
   const [context, setContext] = useState('');
   const [mode, setMode] = useState<'approval' | 'autonomous'>('approval');
 
@@ -210,7 +210,7 @@ export const AgentEnginePanel: React.FC = () => {
       setTitle('');
       setDescription('');
       setContext('');
-      setTargetFiles('src/');
+      setTargetFiles('src/example.ts');
       await loadProjectData(projectId);
       await openTask(task);
       setNotice('Task queued. The dedicated worker will pick it up when its environment is online.');
@@ -286,15 +286,16 @@ export const AgentEnginePanel: React.FC = () => {
           { label: 'Awaiting approval', value: statusCounts.approvals, icon: ShieldCheck, style: 'text-amber-700 bg-amber-50' },
           { label: 'Draft PRs created', value: statusCounts.proposed, icon: CheckCircle2, style: 'text-emerald-700 bg-emerald-50' },
           { label: 'Failed', value: statusCounts.failed, icon: CircleAlert, style: 'text-rose-700 bg-rose-50' },
-        ].map(card => (
-          <div key={card.label} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
+        ].map(card => {
+          const Icon = card.icon;
+          return <div key={card.label} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
             <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${card.style}`}>
-              <card.icon className="w-4 h-4" />
+              <Icon className="w-4 h-4" />
             </div>
             <div className="mt-3 text-2xl font-black text-slate-900 tabular-nums">{card.value}</div>
             <div className="text-[11px] text-slate-500 font-semibold">{card.label}</div>
-          </div>
-        ))}
+          </div>;
+        })}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.9fr)] gap-5">
