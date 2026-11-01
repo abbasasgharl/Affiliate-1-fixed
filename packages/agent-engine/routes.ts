@@ -98,7 +98,8 @@ export function createAgentEngineRouter(options: AgentEngineRouterOptions) {
       });
     }
     await repository.createProject(parsed.data);
-    return res.status(201).json({ success: true, project: parsed.data });
+    const project = (await repository.listProjects()).find(item => item.id === parsed.data.id);
+    return res.status(201).json({ success: true, project });
   }));
 
   router.post('/projects/:projectId/tasks', asyncRoute(async (req, res) => {
