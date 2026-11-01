@@ -148,7 +148,7 @@ export function createAgentEngineRouter(options: AgentEngineRouterOptions) {
     const task = await repository.getTask(taskId.data);
     if (!task) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Task not found.' } });
     const [artifacts, validation] = await Promise.all([
-      repository.getArtifacts(task.id),
+      repository.getArtifactMetadata(task.id),
       repository.getLatestValidation(task.id),
     ]);
     return res.json({
@@ -157,7 +157,6 @@ export function createAgentEngineRouter(options: AgentEngineRouterOptions) {
       artifacts: artifacts.map(file => ({
         path: file.path,
         operation: file.operation,
-        rationale: file.rationale,
       })),
       validation,
     });
