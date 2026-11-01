@@ -33,6 +33,7 @@ fi
 
 node --input-type=module <<'NODE'
 import fs from 'node:fs';
+import path from 'node:path';
 const parseMap = (name) => {
   let value;
   try { value = JSON.parse(process.env[name] || ''); }
@@ -50,6 +51,7 @@ const parseMap = (name) => {
 const roots = parseMap('AGENT_PROJECT_ROOTS');
 const images = parseMap('AGENT_SANDBOX_IMAGES');
 for (const [projectId, root] of Object.entries(roots)) {
+  if (!path.isAbsolute(root)) throw new Error('Project checkout path must be absolute: ' + projectId);
   const stat = fs.lstatSync(root);
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Project checkout must be a real directory: ' + projectId);
   if (!Object.hasOwn(images, projectId)) throw new Error('Missing sandbox image for project: ' + projectId);
