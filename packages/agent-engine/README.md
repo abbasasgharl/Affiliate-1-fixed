@@ -64,7 +64,7 @@ The workspace provider accepts only project IDs mapped by server configuration; 
 The fixed container pipeline runs offline dependency installation with lifecycle scripts disabled, then the project's lint, build and test scripts when present. It uses `--network=none`, a read-only container root, dropped Linux capabilities, `no-new-privileges`, a non-root UID, bounded CPU/RAM/PIDs/time/output, and one disposable workspace bind mount. It accepts no task-provided shell commands, image names, environment variables or extra mounts. The sandbox image must be prebuilt with Node/npm and a populated npm cache for the project's dependency set; network access is intentionally unavailable during validation.
 
 ### Deployment boundary
-- Run the queue worker and Docker daemon on a dedicated worker host or VM, separate from the AffiliateOS web/API process.
+- Run the queue worker and Docker daemon on a dedicated worker host or VM, separate from the AffiliateOS web/API process. Run the worker as UID/GID 10001 so the non-root container user can access its mode-0700 temporary workspace.
 - Never mount `/var/run/docker.sock` into the API container. Docker daemon access is effectively host-level privilege.
 - Pin the sandbox image by digest and rebuild it through a trusted image pipeline.
 - Configure `projectRoots` only with trusted local checkouts. The workspace provider is security-critical and must never copy credentials or production data.
