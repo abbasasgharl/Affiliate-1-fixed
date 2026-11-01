@@ -3,8 +3,8 @@ import {
   Activity,
   Bot,
   CheckCircle2,
-  CircleAlert,
-  Clock3,
+  AlertTriangle,
+  Clock,
   ExternalLink,
   Plus,
   RefreshCw,
@@ -301,7 +301,7 @@ export const AgentEnginePanel: React.FC = () => {
           { label: 'Active', value: statusCounts.active, icon: Activity, style: 'text-blue-700 bg-blue-50' },
           { label: 'Awaiting approval', value: statusCounts.approvals, icon: ShieldCheck, style: 'text-amber-700 bg-amber-50' },
           { label: 'Draft PRs created', value: statusCounts.proposed, icon: CheckCircle2, style: 'text-emerald-700 bg-emerald-50' },
-          { label: 'Failed', value: statusCounts.failed, icon: CircleAlert, style: 'text-rose-700 bg-rose-50' },
+          { label: 'Failed', value: statusCounts.failed, icon: AlertTriangle, style: 'text-rose-700 bg-rose-50' },
         ].map(card => {
           const Icon = card.icon;
           return <div key={card.label} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
@@ -495,7 +495,7 @@ export const AgentEnginePanel: React.FC = () => {
       </div>
 
       <div className="flex items-center gap-2 text-[10px] text-slate-500">
-        <Clock3 className="w-3.5 h-3.5" />
+        <Clock className="w-3.5 h-3.5" />
         The worker runs separately. If tasks remain queued, verify the worker service, Cloud SQL connection and per-project sandbox configuration.
       </div>
     </div>
