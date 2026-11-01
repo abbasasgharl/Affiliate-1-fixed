@@ -177,7 +177,7 @@ export class DockerSandboxValidator {
         resolve(value);
       };
 
-      if (!child.stdout || !child.stderr) {\n        child.kill('SIGKILL');\n        finish({ exitCode: null, stdout, stderr, timedOut, outputLimit, error: 'Docker process streams could not be initialized.' });\n        return;\n      }\n\n      const timer = setTimeout(() => {
+      const timer = setTimeout(() => {
         timedOut = true;
         child.kill('SIGKILL');
       }, this.timeoutMs);
