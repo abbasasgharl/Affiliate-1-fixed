@@ -61,11 +61,12 @@ const orchestrator = new AgentOrchestrator({ validator });
 
 The workspace provider accepts only project IDs mapped by server configuration; task input cannot select a filesystem path. It skips symlinks and credential/dependency/build directories, enforces source and generated-file limits, restricts generated paths, and removes the temporary workspace after validation.
 
-The fixed container pipeline runs offline dependency installation with lifecycle scripts disabled, then the project's lint, build and test scripts when present. It uses `--network=none`, a read-only container root, dropped Linux capabilities, `no-new-privileges`, a non-root UID, bounded CPU/RAM/PIDs/time/output, and one disposable workspace bind mount. It accepts no task-provided shell commands, image names, environment variables or extra mounts. The sandbox image must be prebuilt with Node/npm and a populated npm cache for the project's dependency set; network access is intentionally unavailable during validation.
+The fixed container pipeline runs offline dependency installation with lifecycle scripts disabled, then the project's lint, build and test scripts when present. It uses `--network=none`, a read-only container root, dropped Linux capabilities, `no-new-privileges`, a non-root UID, bounded CPU/RAM/PIDs/time/output, and one disposable workspace bind mount. It accepts no task-provided shell commands, image names, environment variables or extra mounts. The sandbox image must be built for the target project from its root `package.json` and `package-lock.json`. The included `sandbox-image/Dockerfile` fetches dependencies during the trusted image-build stage, seeds an offline npm cache, and requires the Node base image to be supplied as a digest-pinned build argument. At runtime, `npm ci --offline` uses that cache; network access is intentionally unavailable during validation.
 
 ### Deployment boundary
 - Run the queue worker and Docker daemon on a dedicated worker host or VM, separate from the AffiliateOS web/API process. Run the worker as UID/GID 10001 so the non-root container user can access its mode-0700 temporary workspace.
 - Never mount `/var/run/docker.sock` into the API container. Docker daemon access is effectively host-level privilege.
+- Build a project-specific image with `docker build -f packages/agent-engine/sandbox-image/Dockerfile --build-arg NODE_IMAGE=node:22-alpine@sha256:<verified-base-digest> -t <registry>/<project>-agent-sandbox:<version> .`; push it to a private registry and set `AGENT_SANDBOX_IMAGE` to the pushed image's immutable SHA-256 digest.
 - Pin the sandbox image by digest and rebuild it through a trusted image pipeline.
 - Configure `projectRoots` only with trusted local checkouts. The workspace provider is security-critical and must never copy credentials or production data.
 - The sandbox requires a Docker daemon, a pinned image and a full project checkout before end-to-end validation can pass.
@@ -81,4 +82,4 @@ The fixed container pipeline runs offline dependency installation with lifecycle
 Node.js 20+, existing `@google/genai`, `zod`, and `pg` dependencies, plus `GEMINI_API_KEY`. Optional `AGENT_ENGINE_MODEL`.
 
 ## Remaining phases
-GitHub PR adapter, authenticated Express endpoints, durable queue runner, pinned sandbox image build/publishing, integration tests on the dedicated worker host and admin dashboard. Local build, typecheck, automated tests, Docker execution and Cloud SQL migrations have not yet been executed in this environment.
+GitHub PR adapter, authenticated Express endpoints, durable queue runner, image publishing/registry configuration, integration tests on the dedicated worker host and admin dashboard. The new GitHub Actions workflow will run workspace unit tests, TypeScript checks and the production build. Docker execution and Cloud SQL migrations still require the dedicated worker/Cloud SQL environment.
