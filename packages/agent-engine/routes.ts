@@ -19,6 +19,16 @@ const projectSchema = z.object({
   rules: z.record(z.string(), z.unknown()).optional(),
 }).strict();
 
+const forbiddenTargetPath = [
+  /(^|\/)\.env(?:\.|$)/i,
+  /(^|\/)\.git(?:\/|$)/i,
+  /(^|\/)node_modules(?:\/|$)/i,
+  /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/i,
+  /(^|\/)(\.npmrc|\.netrc|\.pypirc|\.git-credentials)$/i,
+  /(^|\/)\.(ssh|aws|docker|config)(\/|$)/i,
+  /\.(pem|key|p12|pfx)$/i,
+];
+
 const allowedTargetPath = (value: string): boolean => {
   const normalized = value.replace(/\\/g, '/').replace(/^\.\//, '');
   const parts = normalized.split('/');
