@@ -97,38 +97,48 @@ function buildAgentTask(task: PersistedTask): AgentTask {
 
 async function executeTask(task: PersistedTask): Promise<void> {
   const startedAt = Date.now();
-  const agentTask = buildAgentTask(task);
-  const outcome = await orchestrator.execute(agentTask);
-  const validation = 'validation' in outcome ? outcome.validation : undefined;
-  const result = 'result' in outcome ? outcome.result : undefined;
-  const errors = 'errors' in outcome ? outcome.errors : [];
+  const heartbeat = setInterval(() => {
+    void repository.heartbeatTask(task.id).catch(error => {
+      console.error(`[AgentWorker] Lease heartbeat failed for task ${task.id}:`, error);
+    });
+  }, 60_000);
 
-  await repository.saveExecution({
-    taskId: task.id,
-    model: MODEL,
-    status: outcome.status,
-    durationMs: Date.now() - startedAt,
-    metadata: { category: task.category, requestedMode: task.executionMode },
-  });
+  try {
+    const agentTask = buildAgentTask(task);
+    const outcome = await orchestrator.execute(agentTask);
+    const validation = 'validation' in outcome ? outcome.validation : undefined;
+    const result = 'result' in outcome ? outcome.result : undefined;
+    const errors = 'errors' in outcome ? outcome.errors : [];
 
-  if (result) await repository.saveWorkerResult(task.id, result);
-  if (validation) await repository.saveValidation(task.id, validation);
+    await repository.saveExecution({
+      taskId: task.id,
+      model: MODEL,
+      status: outcome.status,
+      durationMs: Date.now() - startedAt,
+      metadata: { category: task.category, requestedMode: task.executionMode },
+    });
 
-  if (validation?.passed) {
-    if (task.executionMode === 'autonomous' && allowAutonomous && integration) {
-      await repository.setTaskStatus(task.id, 'ready_to_propose');
+    if (result) await repository.saveWorkerResult(task.id, result);
+    if (validation) await repository.saveValidation(task.id, validation);
+
+    if (validation?.passed) {
+      if (task.executionMode === 'autonomous' && allowAutonomous && integration) {
+        await repository.setTaskStatus(task.id, 'ready_to_propose');
+        return;
+      }
+      await repository.requestApproval(task.id, task.requestedBy);
       return;
     }
-    await repository.requestApproval(task.id, task.requestedBy);
-    return;
-  }
 
-  if (!validation) {
-    await repository.setTaskStatus(
-      task.id,
-      'failed',
-      errors.join('; ').slice(0, 4000) || 'Agent execution failed before validation.',
-    );
+    if (!validation) {
+      await repository.setTaskStatus(
+        task.id,
+        'failed',
+        errors.join('; ').slice(0, 4000) || 'Agent execution failed before validation.',
+      );
+    }
+  } finally {
+    clearInterval(heartbeat);
   }
 }
 
