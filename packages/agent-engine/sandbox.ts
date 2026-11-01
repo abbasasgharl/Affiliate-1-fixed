@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { Buffer } from 'node:buffer';
 import { env } from 'node:process';
 import { lstat, realpath } from 'node:fs/promises';
-import path from 'node:path';
+import * as path from 'node:path';
 import type { AgentTask, GeneratedFile, ValidationReport } from './index.ts';
 
 export interface SandboxWorkspace {
