@@ -11,6 +11,48 @@ import {
   UserRole
 } from '../types';
 
+export interface AgentEngineProject {
+  id: string;
+  name: string;
+  repositoryUrl: string | null;
+  defaultBranch: string;
+}
+
+export type AgentEngineTaskStatus =
+  | 'queued' | 'running' | 'validating' | 'awaiting_approval'
+  | 'ready_to_propose' | 'proposing' | 'proposed' | 'failed' | 'cancelled';
+
+export interface AgentEngineTask {
+  id: string;
+  projectId: string;
+  title: string;
+  description: string;
+  category: string;
+  executionMode: 'approval' | 'autonomous';
+  status: AgentEngineTaskStatus;
+  requestedBy: string | null;
+  input: Record<string, unknown>;
+  result: unknown;
+  errorMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface AgentEngineTaskDetail {
+  task: AgentEngineTask;
+  artifacts: Array<{ path: string; operation: string }>;
+  validation: { passed: boolean; checks: string[]; findings: string[] } | null;
+  approval: {
+    id: string;
+    decision: 'pending' | 'approved' | 'rejected';
+    requestedBy: string | null;
+    decidedBy: string | null;
+    comment: string | null;
+    createdAt: string;
+  } | null;
+}
+
 const ROLE_HINT_KEY = 'affiliateos_admin_role';
 
 // Authentication uses an HttpOnly, SameSite=Strict session cookie set by the server.
@@ -434,4 +476,107 @@ export const api = {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to clear all messages');
   }
+
+  // Reusable Agent Engine APIs (super-admin control plane)
+  async agentEngineListProjects(): Promise<AgentEngineProject[]> {
+    const res = await fetch('/api/agent-engine/projects', { headers: getAuthHeader() });
+    const data = await res.json();
+    if (!res.ok) throw new Error(extractErrorMessage(data, 'Failed to load agent projects'));
+    return data.projects || [];
+  },
+
+  async agentEngineCreateProject(input: {
+    id: string; name: string; repositoryUrl?: string; defaultBranch?: string;
+  }): Promise<AgentEngineProject> {
+    const res = await fetch('/api/agent-engine/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(input),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(extractErrorMessage(data, 'Failed to create agent project'));
+    return data.project;
+  },
+
+  async agentEngineCreateTask(projectId: string, input: {
+    title: string; description: string; category: string;
+    targetFiles: string[]; context?: string; mode: 'approval' | 'autonomous';
+  }): Promise<AgentEngineTask> {
+    const res = await fetch(`/api/agent-engine/projects/${encodeURIComponent(projectId)}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(input),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(extractErrorMessage(data, 'Failed to queue agent task'));
+    return data.task;
+  },
+
+  async agentEngineListTasks(projectId: string, filters: {
+    limit?: number; status?: AgentEngineTaskStatus;
+  } = {}): Promise<AgentEngineTask[]> {
+    const query = new URLSearchParams();
+    if (filters.limit) query.set('limit', String(filters.limit));
+    if (filters.status) query.set('status', filters.status);
+    const suffix = query.size ? `?${query.toString()}` : '';
+    const res = await fetch(`/api/agent-engine/projects/${encodeURIComponent(projectId)}/tasks${suffix}`, {
+      headers: getAuthHeader(),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(extractErrorMessage(data, 'Failed to load agent tasks'));
+    return data.tasks || [];
+  },
+
+  async agentEngineGetTask(taskId: string): Promise<AgentEngineTaskDetail> {
+    const res = await fetch(`/api/agent-engine/tasks/${encodeURIComponent(taskId)}`, {
+      headers: getAuthHeader(),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(extractErrorMessage(data, 'Failed to load agent task'));
+    return data;
+  },
+
+  async agentEngineRequestApproval(taskId: string): Promise<{ id: string; decision: 'pending' }> {
+    const res = await fetch(`/api/agent-engine/tasks/${encodeURIComponent(taskId)}/approval`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(extractErrorMessage(data, 'Failed to request approval'));
+    return data.approval;
+  },
+
+  async agentEngineDecideApproval(approvalId: string, decision: 'approved' | 'rejected', comment?: string): Promise<void> {
+    const res = await fetch(`/api/agent-engine/approvals/${encodeURIComponent(approvalId)}/decision`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ decision, comment }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(extractErrorMessage(data, 'Failed to record approval decision'));
+  },
+
+  async agentEngineProposeTask(taskId: string): Promise<{ url?: string; reference?: string }> {
+    const res = await fetch(`/api/agent-engine/tasks/${encodeURIComponent(taskId)}/propose`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(extractErrorMessage(data, 'Failed to create GitHub proposal'));
+    return data.pullRequest;
+  },
+
+  async agentEngineGetUsage(projectId: string): Promise<{
+    executions: number; inputTokens: number; outputTokens: number; estimatedCost: string;
+  }> {
+    const res = await fetch(`/api/agent-engine/projects/${encodeURIComponent(projectId)}/usage`, {
+      headers: getAuthHeader(),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(extractErrorMessage(data, 'Failed to load agent usage'));
+    return data.usage;
+  },
+
 };
