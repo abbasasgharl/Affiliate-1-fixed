@@ -69,7 +69,8 @@ export class DockerSandboxValidator {
     private readonly options: DockerSandboxOptions,
   ) {
     if (typeof options.image === 'string') validateImage(options.image);
-    else {\n      const images = Object.values(options.image);\n      if (images.length === 0) throw new Error('At least one project sandbox image must be configured.');\n      images.forEach(validateImage);\n    }
+    else {
+      const images = Object.values(options.image);\n      if (images.length === 0) throw new Error('At least one project sandbox image must be configured.');\n      images.forEach(validateImage);\n    }
     this.timeoutMs = bounded(options.timeoutMs, 180_000, 10_000, 600_000);
     this.memoryMb = bounded(options.memoryMb, 1024, 256, 4096);
     this.cpus = Math.max(0.25, Math.min(options.cpus ?? 1, 4));
@@ -135,6 +136,8 @@ export class DockerSandboxValidator {
     outputLimit: boolean;
     error?: string;
   }> {
+    const image = typeof this.options.image === 'string' ? this.options.image : this.options.image[projectId];
+    if (!image) throw new Error('No sandbox image is configured for project: ' + projectId);
     return new Promise(resolve => {
       const args = [
         'run', '--rm', '--init',
