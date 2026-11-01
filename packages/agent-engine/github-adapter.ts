@@ -136,7 +136,7 @@ export class GitHubPullRequestAdapter implements IntegrationAdapter {
     }
     validateProposalFiles(input.files);
 
-    const target = this.options.projects[input.projectId];
+    const target = Object.hasOwn(this.options.projects, input.projectId) ? this.options.projects[input.projectId] : undefined;
     if (!target) throw new Error('No GitHub repository is configured for this project.');
     validateTarget(target);
 
