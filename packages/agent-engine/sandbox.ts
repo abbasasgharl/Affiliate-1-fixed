@@ -72,7 +72,8 @@ export class DockerSandboxValidator {
     else {
       const images = Object.values(options.image);
       if (images.length === 0) throw new Error('At least one project sandbox image must be configured.');
-      images.forEach(validateImage);\n    }
+      images.forEach(validateImage);
+    }
     this.timeoutMs = bounded(options.timeoutMs, 180_000, 10_000, 600_000);
     this.memoryMb = bounded(options.memoryMb, 1024, 256, 4096);
     this.cpus = Math.max(0.25, Math.min(options.cpus ?? 1, 4));
@@ -93,7 +94,7 @@ export class DockerSandboxValidator {
       const source = await realpath(absolutePath);
       if (source.includes(',')) throw new Error('Sandbox workspace path contains an unsupported character.');
 
-      const result = await this.runContainer(source, validatedTask.projectId);
+      const result = await this.runContainer(source, task.projectId);
       const output = [result.stdout, result.stderr].filter(Boolean).join('\n').slice(0, this.maxOutputBytes);
       const findings = result.error
         ? [result.error]
