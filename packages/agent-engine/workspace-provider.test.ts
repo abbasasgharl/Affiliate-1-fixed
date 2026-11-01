@@ -1,6 +1,6 @@
 import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, access, rm } from 'node:fs/promises';
+import * as assert from 'node:assert/strict';
+import { mkdtemp, mkdir, writeFile, readFile, access, readdir, rm } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { LocalProjectWorkspaceProvider } from './workspace-provider.ts';
@@ -68,7 +68,7 @@ test('rejects path traversal and removes a failed temporary workspace', async ()
       }]),
       /Workspace policy rejected path/,
     );
-    const remaining = await (await import('node:fs/promises')).readdir(f.temp);
+    const remaining = await readdir(f.temp);
     assert.deepEqual(remaining, []);
   } finally {
     await rm(f.root, { recursive: true, force: true });
