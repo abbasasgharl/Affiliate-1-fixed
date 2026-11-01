@@ -20,14 +20,32 @@ function parseJsonEnv<T>(name: string): T {
   }
 }
 
+function parseStringMap(name: string): Record<string, string> {
+  const value = parseJsonEnv<unknown>(name);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${name} must be a JSON object of string values.`);
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length === 0 || entries.some(([key, item]) => !key || typeof item !== 'string' || !item.trim())) {
+    throw new Error(`${name} must contain at least one non-empty string mapping.`);
+  }
+  return Object.fromEntries(entries) as Record<string, string>;
+}
+
+function boundedNumber(name: string, fallback: number, min: number, max: number): number {
+  const value = Number(env[name] ?? fallback);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, value));
+}
+
 function boundedInteger(name: string, fallback: number, min: number, max: number): number {
   const value = Number(env[name] ?? fallback);
   if (!Number.isInteger(value)) return fallback;
   return Math.max(min, Math.min(max, value));
 }
 
-const projectRoots = parseJsonEnv<Record<string, string>>('AGENT_PROJECT_ROOTS');
-const sandboxImages = parseJsonEnv<Record<string, string>>('AGENT_SANDBOX_IMAGES');
+const projectRoots = parseStringMap('AGENT_PROJECT_ROOTS');
+const sandboxImages = parseStringMap('AGENT_SANDBOX_IMAGES');
 const workspaces = new LocalProjectWorkspaceProvider({
   projectRoots,
   tempRoot: env.AGENT_WORKSPACE_TEMP_ROOT || '/var/tmp/agent-workspaces',
@@ -36,7 +54,7 @@ const validator = new DockerSandboxValidator(workspaces, {
   image: sandboxImages,
   timeoutMs: boundedInteger('AGENT_SANDBOX_TIMEOUT_MS', 180_000, 10_000, 600_000),
   memoryMb: boundedInteger('AGENT_SANDBOX_MEMORY_MB', 1024, 256, 4096),
-  cpus: Number(env.AGENT_SANDBOX_CPUS || 1),
+  cpus: boundedNumber('AGENT_SANDBOX_CPUS', 1, 0.25, 4),
   pidsLimit: boundedInteger('AGENT_SANDBOX_PIDS_LIMIT', 128, 32, 512),
 });
 
@@ -147,7 +165,7 @@ async function run(): Promise<void> {
     try {
       if (Date.now() - lastRecoveryAt > 60_000) {
         const recovered = await repository.recoverStaleTasks(900);
-        if (recovered) process.stdout.write(`[AgentWorker] Recovered ${recovered} stale execution task(s).\n`);
+        if (recovered) process.stdout.write(`[AgentWorker] Recovered/closed ${recovered} stale agent task lease(s).\n`);
         lastRecoveryAt = Date.now();
       }
 
