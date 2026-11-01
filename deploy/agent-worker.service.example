@@ -12,6 +12,7 @@ WorkingDirectory=/opt/affiliateos
 EnvironmentFile=/etc/affiliateos/agent-worker.env
 Environment=NODE_ENV=production
 UMask=0077
+ExecStartPre=/usr/bin/install -d -o agent-worker -g docker -m 0700 /var/tmp/agent-workspaces
 ExecStart=/usr/bin/npm run agent-worker
 Restart=on-failure
 RestartSec=5
