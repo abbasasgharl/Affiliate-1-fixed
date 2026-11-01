@@ -121,6 +121,13 @@ export class GitHubPullRequestAdapter implements IntegrationAdapter {
     if (!options.token || options.token.trim().length < 20) {
       throw new Error('A valid GitHub token is required for pull-request integration.');
     }
+    if (!options.projects || typeof options.projects !== 'object' || Array.isArray(options.projects)) {
+      throw new Error('A server-owned GitHub project mapping is required.');
+    }
+    for (const [projectId, target] of Object.entries(options.projects)) {
+      if (!/^[A-Za-z0-9_-]{1,100}$/.test(projectId)) throw new Error('GitHub project mapping contains an invalid project ID.');
+      validateTarget(target);
+    }
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
