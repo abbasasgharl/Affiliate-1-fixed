@@ -1,4 +1,5 @@
 import { env } from 'node:process';
+import { Buffer } from 'node:buffer';
 import { GoogleGenAI, Type } from '@google/genai';
 import { z } from 'zod';
 
