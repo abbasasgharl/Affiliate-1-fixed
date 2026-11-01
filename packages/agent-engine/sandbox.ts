@@ -146,6 +146,8 @@ export class DockerSandboxValidator {
         '--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=128m',
         '--tmpfs=/home/worker:rw,noexec,nosuid,nodev,size=64m',
         '--workdir=/workspace',
+        '--env=HOME=/tmp',
+        '--env=CI=true',
         `--mount=type=bind,src=${workspacePath},dst=/workspace,rw`,
         this.options.image,
         '/bin/sh', '-lc', CHECK_SCRIPT,
