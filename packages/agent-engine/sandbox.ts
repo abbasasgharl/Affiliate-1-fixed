@@ -161,7 +161,10 @@ export class DockerSandboxValidator {
       let outputLimit = false;
       let settled = false;
       let forceKillTimer: ReturnType<typeof setTimeout> | undefined;
+      let stopping = false;
       const stopContainer = () => {
+        if (stopping) return;
+        stopping = true;
         child.kill('SIGTERM');
         forceKillTimer = setTimeout(() => child.kill('SIGKILL'), 5_000);
       };
