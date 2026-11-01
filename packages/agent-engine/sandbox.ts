@@ -164,7 +164,8 @@ export class DockerSandboxValidator {
       const stopContainer = () => {
         child.kill('SIGTERM');
         forceKillTimer = setTimeout(() => child.kill('SIGKILL'), 5_000);
-      };\n      const child = spawn(this.dockerBinary, args, {
+      };
+      const child = spawn(this.dockerBinary, args, {
         shell: false,
         windowsHide: true,
         env: { PATH: env.PATH ?? '/usr/bin:/bin', HOME: env.HOME ?? '/tmp' },
@@ -178,7 +179,8 @@ export class DockerSandboxValidator {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        if (forceKillTimer) clearTimeout(forceKillTimer);\n        resolve(value);
+        if (forceKillTimer) clearTimeout(forceKillTimer);
+        resolve(value);
       };
 
       const timer = setTimeout(() => {
