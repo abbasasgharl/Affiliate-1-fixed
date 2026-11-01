@@ -39,10 +39,10 @@ Example wiring (the workspace provider is an infrastructure adapter and must be 
 ```ts
 import { AgentOrchestrator } from './index.ts';
 import { DockerSandboxValidator } from './sandbox.ts';
-import { ProjectWorkspaceProvider } from './workspace-provider.ts';
+import { LocalProjectWorkspaceProvider } from './workspace-provider.ts';
 
 const validator = new DockerSandboxValidator(
-  new ProjectWorkspaceProvider(),
+  new LocalProjectWorkspaceProvider({\n    projectRoots: { affiliateos: process.env.AFFILIATEOS_CHECKOUT_PATH! },\n    tempRoot: '/var/tmp/agent-workspaces',\n  }),
   {
     image: process.env.AGENT_SANDBOX_IMAGE!, // must include @sha256:<64-hex digest>
     timeoutMs: 180_000,
