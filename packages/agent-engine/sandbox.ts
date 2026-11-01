@@ -147,7 +147,6 @@ export class DockerSandboxValidator {
         `--cpus=${this.cpus}`,
         '--user=10001:10001',
         '--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=128m',
-        '--tmpfs=/home/worker:rw,noexec,nosuid,nodev,size=64m',
         '--workdir=/workspace',
         '--env=HOME=/tmp',\n        '--env=NPM_CONFIG_CACHE=/tmp/.npm',
         '--env=CI=true',
