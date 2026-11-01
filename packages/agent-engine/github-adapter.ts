@@ -50,14 +50,14 @@ const blockedContent = [
 ];
 
 const blockedPath = [
-  /(^|\\/)\\.env(?:\\.|$)/i,
-  /(^|\\/)\\.git(?:\\/|$)/i,
-  /(^|\\/)node_modules(?:\\/|$)/i,
-  /(^|\\/)(package-lock\\.json|pnpm-lock\\.yaml|yarn\\.lock)$/i,
-  /(^|\\/)(id_rsa|id_ed25519|credentials(?:\\.json)?|service-account(?:\\.json)?)$/i,
-  /(^|\\/)(\\.npmrc|\\.netrc|\\.pypirc|\\.git-credentials)$/i,
-  /(^|\\/)\\.(ssh|aws|docker|config)(\\/|$)/i,
-  /\\.(pem|key|p12|pfx)$/i,
+  /(^|\/)\.env(?:\.|$)/i,
+  /(^|\/)\.git(?:\/|$)/i,
+  /(^|\/)node_modules(?:\/|$)/i,
+  /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/i,
+  /(^|\/)(id_rsa|id_ed25519|credentials(?:\.json)?|service-account(?:\.json)?)$/i,
+  /(^|\/)(\.npmrc|\.netrc|\.pypirc|\.git-credentials)$/i,
+  /(^|\/)\.(ssh|aws|docker|config)(\/|$)/i,
+  /\.(pem|key|p12|pfx)$/i,
 ];
 
 export function validateProposalFiles(files: GeneratedFile[]): void {
