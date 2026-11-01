@@ -11,8 +11,10 @@ Group=docker
 WorkingDirectory=/opt/affiliateos
 EnvironmentFile=/etc/affiliateos/agent-worker.env
 Environment=NODE_ENV=production
+Environment=AGENT_WORKSPACE_TEMP_ROOT=/var/lib/affiliateos-agent-worker
+StateDirectory=affiliateos-agent-worker
+StateDirectoryMode=0700
 UMask=0077
-ExecStartPre=/usr/bin/install -d -o agent-worker -g docker -m 0700 /var/tmp/agent-workspaces
 ExecStart=/usr/bin/npm run agent-worker
 Restart=on-failure
 RestartSec=5
@@ -27,7 +29,6 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
-ReadWritePaths=/var/tmp/agent-workspaces
 
 [Install]
 WantedBy=multi-user.target
