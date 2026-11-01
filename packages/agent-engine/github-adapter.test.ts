@@ -60,3 +60,48 @@ test('requires passing validation and an explicitly configured project', async (
   );
   assert.equal(calls, 0);
 });
+
+test('creates a draft PR using only the server-mapped repository and omits container output', async () => {
+  const requests: Array<{ url: string; method: string; body?: Record<string, unknown> }> = [];
+  const adapter = new GitHubPullRequestAdapter({
+    token: 'github_test_token_12345678901234567890',
+    projects: {
+      affiliateos: { owner: 'example-owner', repository: 'example-repo', baseBranch: 'main' },
+    },
+    fetchImpl: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined;
+      requests.push({ url, method, body });
+      assert.equal(new Headers(init?.headers).get('authorization'), 'Bearer github_test_token_12345678901234567890');
+      let payload: Record<string, unknown> = {};
+      if (url.endsWith('/git/ref/heads/main')) payload = { object: { sha: 'base-sha' } };
+      else if (url.endsWith('/git/commits/base-sha')) payload = { sha: 'base-sha', tree: { sha: 'base-tree' } };
+      else if (url.endsWith('/git/blobs')) payload = { sha: 'blob-sha' };
+      else if (url.endsWith('/git/trees')) payload = { sha: 'tree-sha' };
+      else if (url.endsWith('/git/commits')) payload = { sha: 'commit-sha', tree: { sha: 'tree-sha' } };
+      else if (url.endsWith('/git/refs')) payload = { ref: 'refs/heads/agent/task-test-12345678' };
+      else if (url.endsWith('/pulls')) payload = { number: 42, html_url: 'https://github.com/example-owner/example-repo/pull/42' };
+      else throw new Error('Unexpected GitHub API endpoint: ' + url);
+      return new Response(JSON.stringify(payload), {
+        status: method === 'GET' ? 200 : 201,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch,
+  });
+
+  const result = await adapter.propose({
+    projectId: 'affiliateos',
+    taskId: 'task-test',
+    files: [validFile],
+    summary: 'Add a safe change',
+    validation: passed,
+  });
+
+  assert.equal(result.url, 'https://github.com/example-owner/example-repo/pull/42');
+  assert.equal(result.reference?.startsWith('agent/task-test-'), true);
+  assert.equal(requests.length, 7);
+  const pullRequest = requests.find(request => request.url.endsWith('/pulls'));
+  assert.equal(pullRequest?.body?.draft, true);
+  assert.equal(String(pullRequest?.body?.body).includes('sensitive build output'), false);
+});
