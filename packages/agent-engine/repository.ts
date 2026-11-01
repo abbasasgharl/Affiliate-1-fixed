@@ -92,6 +92,16 @@ export class CloudSqlAgentRepository {
   return (r.rowCount??0)+(staleProposals.rowCount??0);
  }
 
+
+ /** Refreshes a live execution lease so long Gemini/validation calls are not reclaimed. */
+ async heartbeatTask(taskId:string):Promise<boolean>{
+  const r=await this.pool.query(
+   `UPDATE agent_engine.tasks SET started_at=now()
+    WHERE id=$1 AND status IN ('running','validating') RETURNING id`,[taskId]
+  );
+  return Boolean(r.rowCount);
+ }
+
  async claimNextTask():Promise<PersistedTask|null>{
   const client=await this.pool.connect();
   try{
