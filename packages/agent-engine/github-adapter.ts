@@ -66,7 +66,7 @@ export function validateProposalFiles(files: GeneratedFile[]): void {
       !normalized ||
       normalized.startsWith('/') ||
       /^[A-Za-z]:/.test(normalized) ||
-      parts.some(part => !part || part === '.' || part === '..') ||
+      parts.some(part => !part || part === '.' || part === '..' || /[\\u0000-\\u001f\\u007f]/.test(part)) ||
       !allowedPrefixes.some(prefix => normalized.startsWith(prefix)) ||
       blockedPath.some(pattern => pattern.test(normalized))
     ) {
