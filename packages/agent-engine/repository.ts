@@ -82,7 +82,14 @@ export class CloudSqlAgentRepository {
    [seconds]
   );
   for(const task of r.rows)await this.audit(this.pool,{projectId:task.project_id,taskId:task.id,action:'agent.task.lease_recovered',metadata:{staleAfterSeconds:seconds}});
-  return r.rowCount??0;
+  const staleProposals=await this.pool.query(
+   `UPDATE agent_engine.tasks SET status='failed',completed_at=now(),
+    error_message='Proposal worker lease expired; verify GitHub for an existing pull request before retrying.'
+    WHERE status='proposing' AND started_at < now() - ($1 * interval '1 second') RETURNING id,project_id`,
+   [seconds]
+  );
+  for(const task of staleProposals.rows)await this.audit(this.pool,{projectId:task.project_id,taskId:task.id,action:'agent.task.proposal_lease_expired',metadata:{staleAfterSeconds:seconds}});
+  return (r.rowCount??0)+(staleProposals.rowCount??0);
  }
 
  async claimNextTask():Promise<PersistedTask|null>{
@@ -135,7 +142,7 @@ export class CloudSqlAgentRepository {
   try{
    await client.query('BEGIN');
    const claimed=await client.query(
-    `UPDATE agent_engine.tasks SET status='proposing',error_message=NULL
+    `UPDATE agent_engine.tasks SET status='proposing',started_at=now(),error_message=NULL
      WHERE id=$1 AND status='ready_to_propose' RETURNING project_id`,[taskId]
    );
    if(!claimed.rowCount){await client.query('ROLLBACK');return false;}
