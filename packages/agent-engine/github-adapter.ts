@@ -42,7 +42,11 @@ interface GitHubPullResponse {
 const API = 'https://api.github.com';
 const allowedPrefixes = ['src/', 'tests/', 'packages/', 'migrations/', 'docs/'];
 const blockedContent = [
-  /-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----/,\n  /\\bAIza[0-9A-Za-z_-]{30,}\\b/,\n  /\\bgh[pousr]_[A-Za-z0-9]{20,}\\b/,\n  /\\bsk-[A-Za-z0-9_-]{20,}\\b/,\n  /(api[_-]?key|client[_-]?secret|access[_-]?token)\\s*[:=]\\s*['\"][^'\"]{12,}['\"]/i,\n];
+  /-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----/,
+  /\\bAIza[0-9A-Za-z_-]{30,}\\b/,
+  /\\bgh[pousr]_[A-Za-z0-9]{20,}\\b/,
+  /\\bsk-[A-Za-z0-9_-]{20,}\\b/,
+  /(api[_-]?key|client[_-]?secret|access[_-]?token)\\s*[:=]\\s*['\"][^'\"]{12,}['\"]/i,\n];
 
 const blockedPath = [
   /(^|\\/)\\.env(?:\\.|$)/i,
