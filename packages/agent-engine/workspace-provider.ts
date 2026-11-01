@@ -18,7 +18,7 @@ export interface LocalWorkspaceProviderOptions {
 
 const excludedNames = new Set([
   '.git', 'node_modules', 'dist', 'build', 'coverage', '.next', '.nuxt',
-  '.turbo', '.cache', '.vercel', '.output', '.ssh', '.aws', '.docker', '.config',
+  '.turbo', '.cache', '.vercel', '.output', '.ssh', '.aws', '.docker', '.config', '.npmrc', '.netrc', '.pypirc', '.git-credentials', '.yarnrc', '.yarnrc.yml',
 ]);
 const excludedFilePatterns = [
   /^\.env(?:\..*)?$/i,
