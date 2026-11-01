@@ -475,7 +475,7 @@ export const api = {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to clear all messages');
-  }
+  },
 
   // Reusable Agent Engine APIs (super-admin control plane)
   async agentEngineListProjects(): Promise<AgentEngineProject[]> {
