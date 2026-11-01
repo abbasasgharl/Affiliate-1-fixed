@@ -32,7 +32,8 @@ export interface DockerSandboxOptions {
 }
 
 const CHECK_SCRIPT =
-  'npm install --ignore-scripts --offline --no-audit --no-fund && ' +
+  'mkdir -p /tmp/.npm && cp -a /opt/npm-cache-seed/. /tmp/.npm/ && ' +
+  'npm ci --ignore-scripts --offline --no-audit --no-fund && ' +
   'npm run lint --if-present && npm run build --if-present && npm run test --if-present';
 
 const bounded = (value: number | undefined, fallback: number, min: number, max: number) =>
@@ -148,7 +149,7 @@ export class DockerSandboxValidator {
         '--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=128m',
         '--tmpfs=/home/worker:rw,noexec,nosuid,nodev,size=64m',
         '--workdir=/workspace',
-        '--env=HOME=/tmp',
+        '--env=HOME=/tmp',\n        '--env=NPM_CONFIG_CACHE=/tmp/.npm',
         '--env=CI=true',
         `--mount=type=bind,src=${workspacePath},dst=/workspace,rw`,
         this.options.image,
