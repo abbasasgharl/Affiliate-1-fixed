@@ -11,6 +11,7 @@ on:
   push:
     branches:
       - feature/agent-engine-docker-sandbox
+      - feature/agent-engine-admin-api
     paths:
       - 'packages/agent-engine/**'
       - 'package.json'
