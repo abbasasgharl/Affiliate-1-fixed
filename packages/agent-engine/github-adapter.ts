@@ -41,15 +41,23 @@ interface GitHubPullResponse {
 
 const API = 'https://api.github.com';
 const allowedPrefixes = ['src/', 'tests/', 'packages/', 'migrations/', 'docs/'];
+const blockedContent = [
+  /-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----/,
+  /\bAIza[0-9A-Za-z_-]{30,}\b/,
+  /\bgh[pousr]_[A-Za-z0-9]{20,}\b/,
+  /\bsk-[A-Za-z0-9_-]{20,}\b/,
+  /(api[_-]?key|client[_-]?secret|access[_-]?token)\s*[:=]\s*['"][^'"]{12,}['"]/i,
+];
+
 const blockedPath = [
-  /(^|\\/)\\.env(?:\\.|$)/i,
-  /(^|\\/)\\.git(?:\\/|$)/i,
-  /(^|\\/)node_modules(?:\\/|$)/i,
-  /(^|\\/)(package-lock\\.json|pnpm-lock\\.yaml|yarn\\.lock)$/i,
-  /(^|\\/)(id_rsa|id_ed25519|credentials(?:\\.json)?|service-account(?:\\.json)?)$/i,
-  /(^|\\/)(\\.npmrc|\\.netrc|\\.pypirc|\\.git-credentials)$/i,
-  /(^|\\/)\\.(ssh|aws|docker|config)(\\/|$)/i,
-  /\\.(pem|key|p12|pfx)$/i,
+  /(^|\/)\.env(?:\.|$)/i,
+  /(^|\/)\.git(?:\/|$)/i,
+  /(^|\/)node_modules(?:\/|$)/i,
+  /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/i,
+  /(^|\/)(id_rsa|id_ed25519|credentials(?:\.json)?|service-account(?:\.json)?)$/i,
+  /(^|\/)(\.npmrc|\.netrc|\.pypirc|\.git-credentials)$/i,
+  /(^|\/)\.(ssh|aws|docker|config)(\/|$)/i,
+  /\.(pem|key|p12|pfx)$/i,
 ];
 
 export function validateProposalFiles(files: GeneratedFile[]): void {
@@ -86,6 +94,9 @@ export function validateProposalFiles(files: GeneratedFile[]): void {
     if (file.operation !== 'delete' && !file.content) {
       throw new Error(`Empty generated file is not allowed: ${normalized}`);
     }
+    if (blockedContent.some(pattern => pattern.test(file.content))) {
+      throw new Error(`Potential secret detected in generated file: ${normalized}`);
+    }
     const size = Buffer.byteLength(file.content, 'utf8');
     if (size > 250_000) throw new Error(`Generated file exceeds size limit: ${normalized}`);
     totalBytes += size;
@@ -94,6 +105,7 @@ export function validateProposalFiles(files: GeneratedFile[]): void {
 }
 
 function validateTarget(target: GitHubProjectTarget): void {
+  if (!target || typeof target !== 'object') throw new Error('Configured GitHub project target is invalid.');
   if (
     !/^[A-Za-z0-9_.-]{1,100}$/.test(target.owner) ||
     !/^[A-Za-z0-9_.-]{1,100}$/.test(target.repository) ||
@@ -121,6 +133,13 @@ export class GitHubPullRequestAdapter implements IntegrationAdapter {
     if (!options.token || options.token.trim().length < 20) {
       throw new Error('A valid GitHub token is required for pull-request integration.');
     }
+    if (!options.projects || typeof options.projects !== 'object' || Array.isArray(options.projects)) {
+      throw new Error('A server-owned GitHub project mapping is required.');
+    }
+    for (const [projectId, target] of Object.entries(options.projects)) {
+      if (!/^[A-Za-z0-9_-]{1,100}$/.test(projectId)) throw new Error('GitHub project mapping contains an invalid project ID.');
+      validateTarget(target);
+    }
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
@@ -136,7 +155,7 @@ export class GitHubPullRequestAdapter implements IntegrationAdapter {
     }
     validateProposalFiles(input.files);
 
-    const target = this.options.projects[input.projectId];
+    const target = Object.hasOwn(this.options.projects, input.projectId) ? this.options.projects[input.projectId] : undefined;
     if (!target) throw new Error('No GitHub repository is configured for this project.');
     validateTarget(target);
 

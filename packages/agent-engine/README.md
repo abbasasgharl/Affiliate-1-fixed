@@ -18,7 +18,7 @@ import { CloudSqlAgentRepository } from './repository.ts';
 
 const repository = new CloudSqlAgentRepository(pool);
 ```
-Pass the already configured application's `pg.Pool`; the repository does not create a pool. Apply `0001_agent_engine.sql` then `0002_agent_engine_indexes.sql` once through the existing Cloud SQL migration process.
+Pass the already configured application's `pg.Pool`; the repository does not create a pool. Apply `0001_agent_engine.sql`, `0002_agent_engine_indexes.sql`, then `0003_agent_engine_proposal_state.sql` once through the existing Cloud SQL migration process.
 
 ## Queue worker lifecycle
 1. Call `recoverStaleTasks()` on worker startup, then use `claimNextTask()` to atomically lease one queued task.
@@ -99,6 +99,68 @@ The adapter independently checks proposal paths, blocked files, duplicate paths 
 
 Unit tests cover unsafe paths, blocked lock/secret files, duplicate paths, size limits, validation gating and project mapping. The integration still needs a live GitHub App/token and a test repository to verify API permissions end-to-end.
 
+
+## Phase 5: authenticated admin API
+
+The server mounts `/api/agent-engine` using the existing AffiliateOS PostgreSQL pool and session authentication. All current endpoints are restricted to `super_admin` because the current project schema does not yet model per-project ownership or membership.
+
+- `POST /api/agent-engine/projects` — create a project configuration.
+- `POST /api/agent-engine/projects/:projectId/tasks` — enqueue a task in Cloud SQL (approval mode is the default).
+- `GET /api/agent-engine/projects/:projectId/tasks` — list tasks with bounded limit, status and timestamp cursor.
+- `GET /api/agent-engine/tasks/:taskId` — inspect task, artifact metadata and latest validation.
+- `POST /api/agent-engine/tasks/:taskId/approval` — request approval after validation.
+- `POST /api/agent-engine/approvals/:approvalId/decision` — approve or reject as a super administrator.
+- `POST /api/agent-engine/tasks/:taskId/propose` — create a draft GitHub PR after approval and passing validation.
+- `GET /api/agent-engine/projects/:projectId/usage` — read token and cost totals.
+
+Proposal requests use a new `proposing` task state and an atomic Cloud SQL claim to prevent simultaneous requests from creating duplicate pull requests. Migration `0003_agent_engine_proposal_state.sql` adds that state. Apply it only after reviewing the SQL and through the existing Cloud SQL migration process; no migration has been run automatically.
+
+Configure the GitHub integration using server-side secrets:
+- `AGENT_GITHUB_TOKEN`: GitHub App installation token or fine-grained token.
+- `AGENT_GITHUB_PROJECTS`: JSON object mapping each project ID to `{ "owner": "...", "repository": "...", "baseBranch": "main" }`.
+
+The API process does not run generated code or start Docker. Task execution remains the responsibility of a separate worker process. Do not expose Docker socket or worker credentials to the web/API container.
+
+
+## Phase 6: separate durable queue worker
+
+The worker runs separately from the Express API, polls the existing Google Cloud SQL queue, leases tasks with `FOR UPDATE SKIP LOCKED`, runs Gemini, validates generated changes in Docker, persists artifacts/validation, and routes the task to approval or proposal. The API process never starts Docker or executes generated code.
+
+Start it on the dedicated Linux worker host with:
+
+```bash
+npm ci
+npm run agent-worker
+```
+
+Required worker environment (use a secret manager or a root-readable environment file; never commit secrets):
+
+- `GEMINI_API_KEY`
+- Existing Cloud SQL settings: `DATABASE_URL` or `SQL_HOST`, `SQL_USER`, `SQL_PASSWORD`, `SQL_DB_NAME`
+- `AGENT_PROJECT_ROOTS`: JSON map of project IDs to trusted local checkout paths, e.g. `{"affiliateos":"/opt/affiliateos"}`.
+- `AGENT_SANDBOX_IMAGES`: JSON map of project IDs to private-registry image references pinned by SHA-256 digest.
+- `AGENT_GITHUB_TOKEN` and `AGENT_GITHUB_PROJECTS` for proposal creation.
+- Optional: `AGENT_ALLOW_AUTONOMOUS_PR=true` to permit autonomous draft PRs. Default is false; autonomous tasks then enter the human approval path.
+- Optional resource/poll settings: `AGENT_WORKER_POLL_MS`, `AGENT_SANDBOX_TIMEOUT_MS`, `AGENT_SANDBOX_MEMORY_MB`, `AGENT_SANDBOX_CPUS`, `AGENT_SANDBOX_PIDS_LIMIT`, `AGENT_WORKSPACE_TEMP_ROOT`.
+
+In production the worker enforces UID 10001. The worker user needs access to the Docker daemon on this dedicated VM (typically via the Docker group, which is effectively host-level privilege), but the API container must never receive Docker socket access. The included `deploy/agent-worker.service.example` is a hardened systemd starting point. It uses systemd `StateDirectory` at `/var/lib/affiliateos-agent-worker` for the private workspace. Ensure the `agent-worker` account has UID 10001 and the `docker` group can access the local Docker socket. Keep the project checkout read-only to the worker and make only the private workspace directory writable.
+
+The worker requeues stale `running`/`validating` tasks after 15 minutes. A stale `proposing` task is marked failed with an explicit instruction to check GitHub before retrying; it is not automatically replayed because a PR may have been created immediately before a worker crash. Execution token counts/costs remain unknown unless a future Gemini usage-metadata integration supplies them.
+
+This is a queue worker implementation, not a deployment. It still needs a dedicated VM, Docker, the Cloud SQL network path, trusted project checkouts, pinned images, secret configuration and a successful live smoke test.
+
+
+## Phase 7: AffiliateOS admin dashboard
+
+The super-admin Admin Portal now includes an **AI Agent Engine** tab. It uses the typed API client and the authenticated endpoints above to:
+- Create/list projects and select the active project.
+- Queue approval-mode or policy-gated autonomous tasks with target files and context.
+- View task status, validation results, changed-file metadata, error messages and approval decisions.
+- Approve/reject pending tasks and request a draft PR for approved work.
+- View per-project execution and usage totals.
+
+The UI tab is hidden from editors because the current API is super-admin-only. The dashboard does not execute code or connect to Docker. If a task remains queued, the worker service or its project-specific configuration is not available.
+
 ## Safety
 - Generated code is never executed in the API process.
 - Autonomous PR creation is disabled by default and must not merge or deploy.
@@ -110,4 +172,4 @@ Unit tests cover unsafe paths, blocked lock/secret files, duplicate paths, size 
 Node.js 20+, existing `@google/genai`, `zod`, and `pg` dependencies, plus `GEMINI_API_KEY`. Optional `AGENT_ENGINE_MODEL`.
 
 ## Remaining phases
-Authenticated Express endpoints, durable queue runner, image publishing/registry configuration, live GitHub/Docker integration tests on the dedicated worker host and admin dashboard. The new GitHub Actions workflow will run workspace unit tests, TypeScript checks and the production build. Docker execution and Cloud SQL migrations still require the dedicated worker/Cloud SQL environment.
+Image publishing/registry configuration, live GitHub/Docker/Cloud SQL integration tests on the dedicated worker host, per-project authorization, UI/API integration tests and operational monitoring. GitHub Actions run 41362243401 passed all 9 unit tests, the TypeScript check and the production build. Docker execution, live GitHub API integration and Cloud SQL migrations still require the dedicated worker/Cloud SQL environment.

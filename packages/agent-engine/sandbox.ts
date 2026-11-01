@@ -22,7 +22,7 @@ export interface SandboxWorkspaceProvider {
 
 export interface DockerSandboxOptions {
   /** A prebuilt image pinned by sha256 digest, e.g. registry.example/agent-checks@sha256:<64 hex>. */
-  image: string;
+  image: string | Record<string, string>;
   timeoutMs?: number;
   memoryMb?: number;
   cpus?: number;
@@ -68,7 +68,12 @@ export class DockerSandboxValidator {
     private readonly workspaces: SandboxWorkspaceProvider,
     private readonly options: DockerSandboxOptions,
   ) {
-    validateImage(options.image);
+    if (typeof options.image === 'string') validateImage(options.image);
+    else {
+      const images = Object.values(options.image);
+      if (images.length === 0) throw new Error('At least one project sandbox image must be configured.');
+      images.forEach(validateImage);
+    }
     this.timeoutMs = bounded(options.timeoutMs, 180_000, 10_000, 600_000);
     this.memoryMb = bounded(options.memoryMb, 1024, 256, 4096);
     this.cpus = Math.max(0.25, Math.min(options.cpus ?? 1, 4));
@@ -89,7 +94,7 @@ export class DockerSandboxValidator {
       const source = await realpath(absolutePath);
       if (source.includes(',')) throw new Error('Sandbox workspace path contains an unsupported character.');
 
-      const result = await this.runContainer(source);
+      const result = await this.runContainer(source, task.projectId);
       const output = [result.stdout, result.stderr].filter(Boolean).join('\n').slice(0, this.maxOutputBytes);
       const findings = result.error
         ? [result.error]
@@ -126,7 +131,7 @@ export class DockerSandboxValidator {
     }
   }
 
-  private runContainer(workspacePath: string): Promise<{
+  private runContainer(workspacePath: string, projectId: string): Promise<{
     exitCode: number | null;
     stdout: string;
     stderr: string;
@@ -134,6 +139,10 @@ export class DockerSandboxValidator {
     outputLimit: boolean;
     error?: string;
   }> {
+    const image = typeof this.options.image === 'string'
+      ? this.options.image
+      : Object.hasOwn(this.options.image, projectId) ? this.options.image[projectId] : undefined;
+    if (!image) throw new Error('No sandbox image is configured for project: ' + projectId);
     return new Promise(resolve => {
       const args = [
         'run', '--rm', '--init',
@@ -152,7 +161,7 @@ export class DockerSandboxValidator {
         '--env=NPM_CONFIG_CACHE=/tmp/.npm',
         '--env=CI=true',
         `--mount=type=bind,src=${workspacePath},dst=/workspace,rw`,
-        this.options.image,
+        image,
         '/bin/sh', '-lc', CHECK_SCRIPT,
       ];
 

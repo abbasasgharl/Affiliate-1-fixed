@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { AgentTask, GeneratedFile, ValidationReport, WorkerResult } from './index.ts';
 
-export type PersistedTaskStatus = 'queued'|'running'|'validating'|'awaiting_approval'|'ready_to_propose'|'proposed'|'failed'|'cancelled';
+export type PersistedTaskStatus = 'queued'|'running'|'validating'|'awaiting_approval'|'ready_to_propose'|'proposing'|'proposed'|'failed'|'cancelled';
 export interface PersistedTask {
   id:string; projectId:string; title:string; description:string; category:string;
   executionMode:'approval'|'autonomous'; status:PersistedTaskStatus;
@@ -34,6 +34,14 @@ export class CloudSqlAgentRepository {
    'INSERT INTO agent_engine.audit_logs (id,project_id,task_id,actor_id,action,metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)',
    [randomUUID(),input.projectId??null,input.taskId??null,input.actorId??null,input.action,JSON.stringify(input.metadata??{})]
   );
+ }
+
+
+ async listProjects():Promise<Array<{id:string;name:string;repositoryUrl:string|null;defaultBranch:string}>>{
+  const r=await this.pool.query(
+   'SELECT id,name,repository_url,default_branch FROM agent_engine.projects ORDER BY created_at DESC'
+  );
+  return r.rows.map(x=>({id:x.id,name:x.name,repositoryUrl:x.repository_url,defaultBranch:x.default_branch}));
  }
 
  async createProject(input:CreateProjectInput):Promise<void>{
@@ -78,11 +86,28 @@ export class CloudSqlAgentRepository {
   const seconds=Math.max(60,Math.min(Math.floor(staleAfterSeconds),86400));
   const r=await this.pool.query(
    `UPDATE agent_engine.tasks SET status='queued',started_at=NULL,error_message='Worker lease expired; task returned to queue.'
-    WHERE status='running' AND started_at < now() - ($1 * interval '1 second') RETURNING id,project_id`,
+    WHERE status IN ('running','validating') AND started_at < now() - ($1 * interval '1 second') RETURNING id,project_id`,
    [seconds]
   );
   for(const task of r.rows)await this.audit(this.pool,{projectId:task.project_id,taskId:task.id,action:'agent.task.lease_recovered',metadata:{staleAfterSeconds:seconds}});
-  return r.rowCount??0;
+  const staleProposals=await this.pool.query(
+   `UPDATE agent_engine.tasks SET status='failed',completed_at=now(),
+    error_message='Proposal worker lease expired; verify GitHub for an existing pull request before retrying.'
+    WHERE status='proposing' AND started_at < now() - ($1 * interval '1 second') RETURNING id,project_id`,
+   [seconds]
+  );
+  for(const task of staleProposals.rows)await this.audit(this.pool,{projectId:task.project_id,taskId:task.id,action:'agent.task.proposal_lease_expired',metadata:{staleAfterSeconds:seconds}});
+  return (r.rowCount??0)+(staleProposals.rowCount??0);
+ }
+
+
+ /** Refreshes a live execution lease so long Gemini/validation calls are not reclaimed. */
+ async heartbeatTask(taskId:string):Promise<boolean>{
+  const r=await this.pool.query(
+   `UPDATE agent_engine.tasks SET started_at=now()
+    WHERE id=$1 AND status IN ('running','validating') RETURNING id`,[taskId]
+  );
+  return Boolean(r.rowCount);
  }
 
  async claimNextTask():Promise<PersistedTask|null>{
@@ -105,11 +130,52 @@ export class CloudSqlAgentRepository {
   finally{client.release();}
  }
 
+
+ /** Atomically claims a validated, approved task for one PR proposal attempt. */
+
+ /** Atomically claims the oldest approved task waiting for a pull-request proposal. */
+ async claimNextProposalTask(actorId?:string):Promise<PersistedTask|null>{
+  const client=await this.pool.connect();
+  try{
+   await client.query('BEGIN');
+   const selected=await client.query(
+    `SELECT * FROM agent_engine.tasks WHERE status='ready_to_propose'
+     ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED`
+   );
+   if(!selected.rowCount){await client.query('COMMIT');return null;}
+   const id=selected.rows[0].id;
+   const updated=await client.query(
+    `UPDATE agent_engine.tasks SET status='proposing',started_at=now(),error_message=NULL
+     WHERE id=$1 RETURNING *`,[id]
+   );
+   await this.audit(client,{projectId:updated.rows[0].project_id,taskId:id,actorId,action:'agent.task.proposal_claimed'});
+   await client.query('COMMIT');
+   return asTask(updated.rows[0]);
+  }catch(error){await client.query('ROLLBACK');throw error;}
+  finally{client.release();}
+ }
+
+ async claimTaskForProposal(taskId:string,actorId?:string):Promise<boolean>{
+  const client=await this.pool.connect();
+  try{
+   await client.query('BEGIN');
+   const claimed=await client.query(
+    `UPDATE agent_engine.tasks SET status='proposing',started_at=now(),error_message=NULL
+     WHERE id=$1 AND status='ready_to_propose' RETURNING project_id`,[taskId]
+   );
+   if(!claimed.rowCount){await client.query('ROLLBACK');return false;}
+   await this.audit(client,{projectId:claimed.rows[0].project_id,taskId,actorId,action:'agent.task.proposal_claimed'});
+   await client.query('COMMIT');
+   return true;
+  }catch(error){await client.query('ROLLBACK');throw error;}
+  finally{client.release();}
+ }
+
  async setTaskStatus(taskId:string,status:PersistedTaskStatus,errorMessage?:string|null):Promise<void>{
   const allowed:Record<PersistedTaskStatus,PersistedTaskStatus[]> = {
    queued:['running','cancelled'],running:['validating','failed','cancelled'],
    validating:['awaiting_approval','ready_to_propose','failed','cancelled'],
-   awaiting_approval:['ready_to_propose','cancelled'],ready_to_propose:['proposed','failed','cancelled'],
+   awaiting_approval:['ready_to_propose','cancelled'],ready_to_propose:['proposing','failed','cancelled'],proposing:['proposed','ready_to_propose','failed'],
    proposed:[],failed:[],cancelled:[]
   };
   const current=await this.getTask(taskId);
@@ -171,6 +237,14 @@ export class CloudSqlAgentRepository {
    await client.query('COMMIT');
   }catch(error){await client.query('ROLLBACK');throw error;}
   finally{client.release();}
+ }
+
+
+ async getArtifactMetadata(taskId:string):Promise<Array<{path:string;operation:string}>>{
+  const r=await this.pool.query(
+   'SELECT file_path,operation FROM agent_engine.artifacts WHERE task_id=$1 ORDER BY created_at ASC',[taskId]
+  );
+  return r.rows.map(x=>({path:x.file_path,operation:x.operation}));
  }
 
  async getArtifacts(taskId:string):Promise<GeneratedFile[]>{
@@ -246,6 +320,16 @@ export class CloudSqlAgentRepository {
    await client.query('COMMIT');
   }catch(error){await client.query('ROLLBACK');throw error;}
   finally{client.release();}
+ }
+
+
+ async getLatestApproval(taskId:string):Promise<{id:string;decision:'pending'|'approved'|'rejected';requestedBy:string|null;decidedBy:string|null;comment:string|null;createdAt:Date}|null>{
+  const r=await this.pool.query(
+   'SELECT id,decision,requested_by,decided_by,comment,created_at FROM agent_engine.approvals WHERE task_id=$1 ORDER BY created_at DESC LIMIT 1',[taskId]
+  );
+  if(!r.rowCount)return null;
+  const x=r.rows[0];
+  return {id:x.id,decision:x.decision,requestedBy:x.requested_by,decidedBy:x.decided_by,comment:x.comment,createdAt:x.created_at};
  }
 
  async getLatestValidation(taskId:string):Promise<ValidationReport|null>{

@@ -37,6 +37,11 @@ import {
   adminUserSchema,
   visitorSchema
 } from './src/security/validation.ts';
+import { pool } from './src/db/index.ts';
+import { CloudSqlAgentRepository } from './packages/agent-engine/repository.ts';
+import { createAgentEngineRouter } from './packages/agent-engine/routes.ts';
+import { GitHubPullRequestAdapter, type GitHubProjectTarget } from './packages/agent-engine/github-adapter.ts';
+
 import type {
   AffiliateProgram,
   ClickRecord,
@@ -1605,6 +1610,24 @@ app.post('/api/notifications/verify-smtp', requireAuth, requireRole('super_admin
   const result = await testSmtpConnection(body);
   res.json(result);
 });
+
+const agentEngineRepository = new CloudSqlAgentRepository(pool);
+const agentEngineIntegration = (() => {
+  const token = process.env.AGENT_GITHUB_TOKEN;
+  const targetsJson = process.env.AGENT_GITHUB_PROJECTS;
+  if (!token || !targetsJson) return undefined;
+  let projects: Record<string, GitHubProjectTarget>;
+  try {
+    projects = JSON.parse(targetsJson) as Record<string, GitHubProjectTarget>;
+  } catch {
+    throw new Error('AGENT_GITHUB_PROJECTS must contain a valid JSON project mapping.');
+  }
+  return new GitHubPullRequestAdapter({ token, projects });
+})();
+app.use('/api/agent-engine', createAgentEngineRouter({
+  repository: agentEngineRepository,
+  integration: agentEngineIntegration,
+}));
 
 // -----------------------------------------------------------------------------
 // CENTRALIZED ERROR HANDLING MIDDLEWARE (SECTION 30)

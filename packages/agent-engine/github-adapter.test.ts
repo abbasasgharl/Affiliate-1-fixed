@@ -20,6 +20,8 @@ test('rejects traversal and sensitive paths in PR proposals', () => {
   assert.throws(() => validateProposalFiles([{ ...validFile, path: 'src/../../.env' }]), /policy rejected path/);
   assert.throws(() => validateProposalFiles([{ ...validFile, path: 'packages/agent-engine/package-lock.json' }]), /policy rejected path/);
   assert.throws(() => validateProposalFiles([{ ...validFile, path: 'src/.env.production' }]), /policy rejected path/);
+  assert.throws(() => validateProposalFiles([{ ...validFile, path: 'src/private-key.pem' }]), /policy rejected path/);
+  assert.throws(() => validateProposalFiles([{ ...validFile, content: 'const api_key = "supersecretvalue123";' }]), /Potential secret detected/);
 });
 
 test('rejects duplicate paths and oversized proposals', () => {

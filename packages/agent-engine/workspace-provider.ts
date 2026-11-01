@@ -69,7 +69,9 @@ export class LocalProjectWorkspaceProvider implements SandboxWorkspaceProvider {
   }
 
   async prepare(task: AgentTask, files: GeneratedFile[]): Promise<SandboxWorkspace> {
-    const configuredRoot = this.options.projectRoots[task.projectId];
+    const configuredRoot = Object.hasOwn(this.options.projectRoots, task.projectId)
+      ? this.options.projectRoots[task.projectId]
+      : undefined;
     if (!configuredRoot) throw new Error('No trusted local checkout is configured for this project.');
 
     const configuredPath = path.resolve(configuredRoot);
