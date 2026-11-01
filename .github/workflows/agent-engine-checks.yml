@@ -10,8 +10,7 @@ on:
       - '.github/workflows/agent-engine-checks.yml'
   push:
     branches:
-      - feature/agent-engine-docker-sandbox
-      - feature/agent-engine-admin-api
+      - 'feature/agent-engine-*'
     paths:
       - 'packages/agent-engine/**'
       - 'package.json'
