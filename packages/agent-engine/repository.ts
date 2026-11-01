@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto';
-import type { Pool, PoolClient } from 'pg';
+import { createHash, randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
 import type { AgentTask, GeneratedFile, ValidationReport, WorkerResult } from './index.ts';
 
 export type PersistedTaskStatus = 'queued'|'running'|'validating'|'awaiting_approval'|'ready_to_propose'|'proposed'|'failed'|'cancelled';
@@ -29,7 +29,7 @@ const asTask=(r:any):PersistedTask=>({
 export class CloudSqlAgentRepository {
  constructor(private readonly pool:Pool) {}
 
- private async audit(client:Pool|PoolClient,input:AuditInput):Promise<void>{
+ private async audit(client:{query:(text:string,values?:any[])=>Promise<any>},input:AuditInput):Promise<void>{
   await client.query(
    'INSERT INTO agent_engine.audit_logs (id,project_id,task_id,actor_id,action,metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)',
    [randomUUID(),input.projectId??null,input.taskId??null,input.actorId??null,input.action,JSON.stringify(input.metadata??{})]
@@ -80,7 +80,7 @@ export class CloudSqlAgentRepository {
    await client.query('BEGIN');
    const selected=await client.query(
     `SELECT * FROM agent_engine.tasks WHERE status='queued'
-     ORDER BY created_at ASC FOR UPDATE SKIP LOCKED LIMIT 1`
+     ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED`
    );
    if(!selected.rowCount){await client.query('COMMIT');return null;}
    const id=selected.rows[0].id;
@@ -95,6 +95,15 @@ export class CloudSqlAgentRepository {
  }
 
  async setTaskStatus(taskId:string,status:PersistedTaskStatus,errorMessage?:string|null):Promise<void>{
+  const allowed:Record<PersistedTaskStatus,PersistedTaskStatus[]> = {
+   queued:['running','cancelled'],running:['validating','failed','cancelled'],
+   validating:['awaiting_approval','ready_to_propose','failed','cancelled'],
+   awaiting_approval:['ready_to_propose','cancelled'],ready_to_propose:['proposed','failed','cancelled'],
+   proposed:[],failed:[],cancelled:[]
+  };
+  const current=await this.getTask(taskId);
+  if(!current)throw new Error('Task not found.');
+  if(!allowed[current.status].includes(status))throw new Error(`Invalid task transition: ${current.status} -> ${status}`);
   const terminal=['proposed','failed','cancelled'].includes(status);
   const r=await this.pool.query(
    `UPDATE agent_engine.tasks SET status=$2,error_message=$3,
@@ -138,8 +147,8 @@ export class CloudSqlAgentRepository {
    for(const file of result.files){
     await client.query(
      `INSERT INTO agent_engine.artifacts (id,task_id,file_path,operation,content,content_sha256)
-      VALUES ($1,$2,$3,$4,$5,encode(digest($5,'sha256'),'hex'))`,
-     [randomUUID(),taskId,file.path,file.operation,file.content]
+      VALUES ($1,$2,$3,$4,$5,$6)`,
+     [randomUUID(),taskId,file.path,file.operation,file.content,createHash('sha256').update(file.content,'utf8').digest('hex')]
     );
    }
    await client.query(
