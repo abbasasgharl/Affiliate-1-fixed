@@ -36,6 +36,14 @@ export class CloudSqlAgentRepository {
   );
  }
 
+
+ async listProjects():Promise<Array<{id:string;name:string;repositoryUrl:string|null;defaultBranch:string}>>{
+  const r=await this.pool.query(
+   'SELECT id,name,repository_url,default_branch FROM agent_engine.projects ORDER BY created_at DESC'
+  );
+  return r.rows.map(x=>({id:x.id,name:x.name,repositoryUrl:x.repository_url,defaultBranch:x.default_branch}));
+ }
+
  async createProject(input:CreateProjectInput):Promise<void>{
   await this.pool.query(
    `INSERT INTO agent_engine.projects (id,name,repository_url,default_branch,rules)
@@ -312,6 +320,16 @@ export class CloudSqlAgentRepository {
    await client.query('COMMIT');
   }catch(error){await client.query('ROLLBACK');throw error;}
   finally{client.release();}
+ }
+
+
+ async getLatestApproval(taskId:string):Promise<{id:string;decision:'pending'|'approved'|'rejected';requestedBy:string|null;decidedBy:string|null;comment:string|null;createdAt:Date}|null>{
+  const r=await this.pool.query(
+   'SELECT id,decision,requested_by,decided_by,comment,created_at FROM agent_engine.approvals WHERE task_id=$1 ORDER BY created_at DESC LIMIT 1',[taskId]
+  );
+  if(!r.rowCount)return null;
+  const x=r.rows[0];
+  return {id:x.id,decision:x.decision,requestedBy:x.requested_by,decidedBy:x.decided_by,comment:x.comment,createdAt:x.created_at};
  }
 
  async getLatestValidation(taskId:string):Promise<ValidationReport|null>{
