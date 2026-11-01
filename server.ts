@@ -37,6 +37,10 @@ import {
   adminUserSchema,
   visitorSchema
 } from './src/security/validation.ts';
+import { pool } from './src/db/index.ts';
+import { CloudSqlAgentRepository } from './packages/agent-engine/repository.ts';
+import { createAgentEngineRouter } from './packages/agent-engine/routes.ts';
+
 import type {
   AffiliateProgram,
   ClickRecord,
@@ -1605,6 +1609,9 @@ app.post('/api/notifications/verify-smtp', requireAuth, requireRole('super_admin
   const result = await testSmtpConnection(body);
   res.json(result);
 });
+
+const agentEngineRepository = new CloudSqlAgentRepository(pool);
+app.use('/api/agent-engine', createAgentEngineRouter({ repository: agentEngineRepository }));
 
 // -----------------------------------------------------------------------------
 // CENTRALIZED ERROR HANDLING MIDDLEWARE (SECTION 30)
