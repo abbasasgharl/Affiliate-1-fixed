@@ -191,6 +191,14 @@ export class CloudSqlAgentRepository {
   finally{client.release();}
  }
 
+
+ async getArtifactMetadata(taskId:string):Promise<Array<{path:string;operation:string}>>{
+  const r=await this.pool.query(
+   'SELECT file_path,operation FROM agent_engine.artifacts WHERE task_id=$1 ORDER BY created_at ASC',[taskId]
+  );
+  return r.rows.map(x=>({path:x.file_path,operation:x.operation}));
+ }
+
  async getArtifacts(taskId:string):Promise<GeneratedFile[]>{
   const r=await this.pool.query(
    'SELECT file_path,operation,content FROM agent_engine.artifacts WHERE task_id=$1 ORDER BY created_at ASC',[taskId]
