@@ -4,7 +4,7 @@ This runbook is for a **separate Linux worker VM**. The AffiliateOS Express/API 
 
 ## 1. Merge and migration order
 
-The Agent Engine work is delivered as stacked draft pull requests. Review and merge them in dependency order, resolving any CI/review feedback before moving to the next PR. Do not merge the later stack until its base PR has landed.
+The Agent Engine work is delivered as stacked draft pull requests: Phase 2 PR #3, Phase 3 PR #4, Phase 4 PR #5, Phases 5–7 PR #6, and Phase 8 PR #7. Review and merge in that order. After each base PR is merged, retarget the next PR's base branch to `main` before merging it (for example, after #3 lands, change #4's base from `feature/reusable-ai-agent-engine` to `main`; repeat for #5, #6 and #7). This keeps each merge incremental and avoids merging the same earlier phase twice. Do not merge a later stack until its base PR has landed and its CI/review feedback is resolved.
 
 Before enabling the API or worker, review and apply these additive migrations to the existing Google Cloud SQL PostgreSQL database:
 
