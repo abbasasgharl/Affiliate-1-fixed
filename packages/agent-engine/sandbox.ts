@@ -95,8 +95,7 @@ export class DockerSandboxValidator {
       if (source.includes(',')) throw new Error('Sandbox workspace path contains an unsupported character.');
 
       const result = await this.runContainer(source, task.projectId);
-      const output = [result.stdout, result.stderr].filter(Boolean).join('
-').slice(0, this.maxOutputBytes);
+      const output = [result.stdout, result.stderr].filter(Boolean).join('\n').slice(0, this.maxOutputBytes);
       const findings = result.error
         ? [result.error]
         : result.timedOut
