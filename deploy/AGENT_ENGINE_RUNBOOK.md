@@ -22,30 +22,46 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/agent-engine/migrations/0003
 
 Use a migration role with schema/table DDL permissions. The runtime role should have only the DML permissions it needs. These migrations have **not** been run by this implementation.
 
-## 2. Prepare the dedicated worker VM
+## 2. Provision the Hetzner worker VM
 
-Use a small Linux VM initially; scale only when queue volume requires it. Install Node.js 22, npm, Git, Docker Engine, Docker Buildx and the PostgreSQL client. Configure network access to the existing Cloud SQL instance (private IP or Cloud SQL Auth Proxy).
+Create a dedicated Ubuntu 24.04 LTS Cloud server in the Hetzner Cloud Console. Start with an x86_64 instance with at least 2 vCPU and 4 GB RAM; sandbox builds may require more memory, so monitor Docker OOM events and resize if needed. Select a region only after checking latency to your Cloud SQL region. Confirm current prices in the [Hetzner Cloud price list](https://www.hetzner.com/cloud/); pricing and VAT vary by location and can change.
 
-Create a dedicated worker account with UID 10001 and Docker daemon access:
+Add an SSH key at server creation. Do not enable password SSH. Restrict inbound SSH to your administrator IP/CIDR in the Hetzner firewall and host firewall; do not expose PostgreSQL port 5432 or Docker port 2375. This VM is dedicated to the worker, not the public API.
+
+Upload `deploy/hetzner-worker-bootstrap.sh` and run it from a root SSH session, supplying your current trusted public IP/CIDR:
 
 ```bash
-sudo groupadd --system docker 2>/dev/null || true
-sudo useradd --system --uid 10001 --home-dir /opt/agent-worker --create-home agent-worker
-sudo usermod -aG docker agent-worker
+sudo ADMIN_CIDR='YOUR_ADMIN_PUBLIC_IP/32' bash deploy/hetzner-worker-bootstrap.sh
 ```
 
-Docker group membership is effectively host-level privilege. Keep this VM dedicated to the worker; do not reuse it as the public API host.
+The script supports only Ubuntu 24.04, installs baseline packages and Docker, creates the worker account with UID 10001, and enables UFW/Fail2ban. Keep the original SSH session open and verify a second SSH login before closing it. Install Node.js 22 using the official Node.js distribution instructions, then verify `node --version` and `npm --version`.
 
-Check out the reviewed AffiliateOS release into `/opt/affiliateos`. Keep the checkout read-only to the worker, install locked dependencies, and ensure the worker can read the source tree:
+Docker group membership is effectively host-root privilege. Keep this VM dedicated to the worker; never mount its Docker socket into the public API host/container. Check out the reviewed AffiliateOS release into `/opt/affiliateos`, make the checkout read-only to the worker, install locked dependencies, and ensure the worker can read the source tree:
 
 ```bash
 cd /opt/affiliateos
 npm ci
 ```
 
-The worker writes only to its private systemd state directory. The example service creates `/var/lib/affiliateos-agent-worker` as a mode-0700 directory owned by the worker account.
+The worker writes only to its private systemd state directory, `/var/lib/affiliateos-agent-worker` (mode 0700).
 
-## 3. Build and publish a sandbox image for each project
+## 3. Connect securely to the existing Google Cloud SQL database
+
+Use the Google Cloud SQL Auth Proxy rather than opening Cloud SQL to the public internet or adding the Hetzner server as a broad authorized network. The proxy creates an authenticated, encrypted connection and listens locally on `127.0.0.1`; the database password is still required separately. See Google's [Cloud SQL Auth Proxy documentation](https://docs.cloud.google.com/sql/docs/postgres/sql-proxy).
+
+In Google Cloud, enable the Cloud SQL Admin API and create a dedicated service account for this worker. Grant it only `roles/cloudsql.client` on the relevant project. Create/download its JSON key only if you accept the operational risk of a long-lived key on the external VM; store it outside the repository at `/etc/google/cloud-sql-proxy/service-account.json`, owned by `root:cloud-sql-proxy` with mode `0640`. Rotate/revoke it if exposed. A keyless external identity federation setup is preferable where your identity provider supports it.
+
+Install the current Cloud SQL Auth Proxy v2 binary from Google's official download page, verify its published SHA-256 checksum, and install it as `/usr/local/bin/cloud-sql-proxy` owned by root and not writable by the service account. Copy `deploy/cloud-sql-proxy.env.example` to `/etc/affiliateos/cloud-sql-proxy.env`, set the real `PROJECT_ID:REGION:INSTANCE_NAME`, and set the credentials path. Install `deploy/cloud-sql-proxy.service.example` as `/etc/systemd/system/affiliateos-cloud-sql-proxy.service`, then:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now affiliateos-cloud-sql-proxy
+sudo systemctl status affiliateos-cloud-sql-proxy
+```
+
+Keep the proxy bound to `127.0.0.1:5432`. Set `SQL_HOST=127.0.0.1` and `SQL_PORT=5432` in the worker environment; do not set `DATABASE_URL` to a direct public Cloud SQL IP. Verify the worker's database user has only the required runtime DML permissions. Do not open port 5432 in either firewall.
+
+## 4. Build and publish a sandbox image for each project
 
 Authenticate Docker to the private registry first. Supply a **verified digest-pinned** Node base image and a versioned image tag:
 
@@ -57,7 +73,7 @@ bash deploy/build-agent-sandbox-image.sh
 
 The script builds from the project root, performs dependency resolution at trusted image-build time, pushes the image and prints its immutable digest reference. Put that exact digest reference into `AGENT_SANDBOX_IMAGES`. Never use a floating tag in worker configuration.
 
-## 4. Configure secrets and project mappings
+## 5. Configure secrets and project mappings
 
 Copy `deploy/agent-worker.env.example` to a secret-managed environment file, then replace every placeholder. Do not commit the real file.
 
@@ -72,11 +88,11 @@ For draft PR creation:
 - `AGENT_GITHUB_PROJECTS`: project ID to owner, repository and base branch.
 - Grant only Contents read/write and Pull Requests read/write (plus repository metadata read).
 
-Configure matching GitHub variables on the API server only if using the dashboard's direct **Create draft GitHub PR** action. The worker also needs them to process approved proposals. The Gemini key and Docker access belong only on the worker, not in the API container.
+Configure matching GitHub variables on the API server only if using the dashboard's direct **Create draft GitHub PR** action. The worker also needs them to process approved proposals. The Gemini key and Docker access belong only on the worker, not in the API container. Keep the Cloud SQL service-account key separate from the worker's .env file; the proxy service alone should be able to read it.
 
 Keep `AGENT_ALLOW_AUTONOMOUS_PR=false initially. In this mode, even tasks submitted as autonomous require a human approval. Enable autonomous draft PR creation only after the approval flow and worker have been tested.
 
-## 5. Validate configuration and start the service
+## 6. Validate configuration and start the service
 
 Run the environment check as UID 10001 after loading the environment file:
 
@@ -96,7 +112,7 @@ sudo journalctl -u affiliateos-agent-worker -f
 
 Ensure the service account's UID is exactly 10001 and its Docker group can access the local daemon socket. The API host must not mount that socket.
 
-## 6. Smoke-test the full workflow
+## 7. Smoke-test the full workflow
 
 1. Sign in to AffiliateOS as a `super_admin`.
 2. Open Admin Portal → AI Agent Engine.
@@ -109,7 +125,7 @@ Ensure the service account's UID is exactly 10001 and its Docker group can acces
 
 If the task remains queued, check Cloud SQL connectivity, worker logs, project ID mappings, Docker daemon access and sandbox image digest. If a task is marked failed with a proposal lease-expired message, inspect GitHub for a PR before attempting any retry; the worker intentionally does not replay an ambiguous PR operation.
 
-## 7. Rollback
+## 8. Rollback
 
 - Stop the worker: `sudo systemctl disable --now affiliateos-agent-worker`.
 - Revoke the worker's GitHub token and Gemini key if compromised.
