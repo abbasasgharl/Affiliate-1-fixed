@@ -29,7 +29,11 @@ fi
 usermod -aG docker agent-worker
 install -d -o agent-worker -g agent-worker -m 0700 /opt/agent-worker
 install -d -o agent-worker -g agent-worker -m 0700 /var/lib/affiliateos-agent-worker
+if ! id cloud-sql-proxy >/dev/null 2>&1; then
+  useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin cloud-sql-proxy
+fi
 install -d -o root -g root -m 0750 /etc/affiliateos
+install -d -o root -g cloud-sql-proxy -m 0750 /etc/google/cloud-sql-proxy
 
 systemctl enable --now docker
 systemctl enable --now fail2ban
