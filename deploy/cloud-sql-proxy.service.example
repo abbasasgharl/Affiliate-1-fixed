@@ -1,0 +1,26 @@
+[Unit]
+Description=Google Cloud SQL Auth Proxy for AffiliateOS Agent Worker
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=cloud-sql-proxy
+Group=cloud-sql-proxy
+EnvironmentFile=/etc/affiliateos/cloud-sql-proxy.env
+ExecStart=/usr/local/bin/cloud-sql-proxy --address 127.0.0.1 --port 5432 --credentials-file ${CLOUD_SQL_CREDENTIALS_FILE} ${CLOUD_SQL_INSTANCE_CONNECTION_NAME}
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
